@@ -1,4 +1,4 @@
-const CACHE = 'gold-signals-v2';
+const CACHE = 'gold-signals-v3';
 const SHELL = ['./', 'index.html', 'style.css', 'indicators.js', 'app.js', 'manifest.json', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {

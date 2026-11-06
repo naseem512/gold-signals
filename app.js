@@ -80,10 +80,13 @@
         ? 'Naya signal: ' + fmtTime(active.time + HOUR) + ' par candle band hui.'
         : 'Signal ' + fmtTime(active.time + HOUR) + ' par aaya tha aur trade abhi chal rahi hai. Agar entry nahi li to price entry se door ho sakti hai, dhyan se.';
       const lot = GS.lotSize(settings.balance, settings.risk, active.slDist);
-      $('lvEntry').textContent = fmt(active.entry);
-      $('lvSL').textContent = fmt(active.sl);
-      $('lvTP1').textContent = fmt(active.tp1);
-      $('lvTP2').textContent = fmt(active.tp2);
+      // Show each level plus its distance from entry, so it can be applied to the broker's own price.
+      const up = active.side === 'BUY';
+      const dist = (lvl, above) => `${fmt(lvl)}<small>Entry se $${fmt(Math.abs(lvl - active.entry))} ${above ? 'upar' : 'neeche'}</small>`;
+      $('lvEntry').innerHTML = `${fmt(active.entry)}<small>Broker par jo price mile</small>`;
+      $('lvSL').innerHTML = dist(active.sl, !up);
+      $('lvTP1').innerHTML = dist(active.tp1, up);
+      $('lvTP2').innerHTML = dist(active.tp2, up);
       if (lot.lots > 0) {
         $('lvLot').textContent = lot.lots.toFixed(2);
         $('lvRisk').textContent = '$' + fmt(lot.riskUsd) + ' (' + fmt(active.slDist) + ' pts)';
@@ -149,7 +152,8 @@
     if (firstRun) return; // don't alert for a trade that was already running when the app was first opened
     beep();
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    const body = `Entry ${fmt(sig.entry)} | SL ${fmt(sig.sl)} | TP ${fmt(sig.tp2)}`;
+    const slD = fmt(Math.abs(sig.sl - sig.entry)), tpD = fmt(Math.abs(sig.tp2 - sig.entry));
+    const body = `Entry ${fmt(sig.entry)} | SL ${fmt(sig.sl)} ($${slD}) | TP ${fmt(sig.tp2)} ($${tpD})`;
     try {
       const reg = await navigator.serviceWorker?.getRegistration();
       if (reg) reg.showNotification('Gold ' + sig.side + ' signal', { body, icon: 'icons/icon-192.png', tag: 'gs-signal' });
