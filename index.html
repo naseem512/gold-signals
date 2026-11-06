@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1115">
+  <meta name="description" content="XAUUSD 1H signal helper: trend, BUY/SELL, SL/TP, lot size aur backtest">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>Gold Signals</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>Gold Signals <span class="tf">XAUUSD · 1H</span></h1>
+      <div class="sub" id="source">Loading…</div>
+    </div>
+    <button class="icon-btn" id="btnRefresh" title="Refresh">⟳</button>
+  </header>
+
+  <main>
+    <section class="card price-card">
+      <div class="price" id="price">—</div>
+      <div class="muted" id="updated">—</div>
+    </section>
+
+    <section class="card signal-card" id="signalCard">
+      <div class="label">Abhi ki position</div>
+      <div class="signal" id="signalText">—</div>
+      <div class="muted" id="signalNote"></div>
+      <div class="levels" id="levels" hidden>
+        <div><span>Entry</span><b id="lvEntry">—</b></div>
+        <div class="sl"><span>Stop Loss</span><b id="lvSL">—</b></div>
+        <div class="tp"><span>TP1 (1R)</span><b id="lvTP1">—</b></div>
+        <div class="tp"><span>TP2 (2R)</span><b id="lvTP2">—</b></div>
+        <div><span>Lot size</span><b id="lvLot">—</b></div>
+        <div><span>Risk</span><b id="lvRisk">—</b></div>
+      </div>
+      <ul class="checks" id="checks" hidden></ul>
+    </section>
+
+    <section class="card">
+      <div class="label">Market ka haal</div>
+      <div class="grid3">
+        <div><span>Trend</span><b id="mTrend">—</b></div>
+        <div><span>RSI (14)</span><b id="mRsi">—</b></div>
+        <div><span>ATR (14)</span><b id="mAtr">—</b></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label">Backtest · <span id="bPeriod">—</span> ka data</div>
+      <table class="bt">
+        <thead><tr><th></th><th>Filter ke saath</th><th>Bina filter</th></tr></thead>
+        <tbody id="btBody"><tr><td colspan="3" class="muted">—</td></tr></tbody>
+      </table>
+      <p class="muted small">Har trade: SL = 1.5×ATR, target = 2R. "Max girawat" = account sab se zyada kitna R neeche gaya. Purana nateeja aage ki guarantee nahi hai.</p>
+    </section>
+
+    <section class="card">
+      <div class="label">Pichle signals</div>
+      <ul class="history" id="history"><li class="muted">—</li></ul>
+    </section>
+
+    <section class="card">
+      <div class="label">Settings</div>
+      <label>Account balance ($)<input type="number" id="setBalance" min="1" step="1" value="1000"></label>
+      <label>Har trade par risk (%)<input type="number" id="setRisk" min="0.1" max="5" step="0.1" value="1"></label>
+      <label class="check"><input type="checkbox" id="setFilter" checked> Fake-signal filter ON (recommended)</label>
+      <label>TwelveData API key (optional, asal XAU/USD ke liye)
+        <input type="text" id="setKey" placeholder="Khali chhorein to Binance PAXG use hoga" autocomplete="off">
+      </label>
+      <div class="row">
+        <button id="btnSave">Save</button>
+        <button id="btnNotify" class="ghost">Alerts ON karein</button>
+      </div>
+      <p class="muted small" id="notifyState"></p>
+    </section>
+
+    <section class="card rules">
+      <div class="label">Rules (app signal kaise deti hai)</div>
+      <ul>
+        <li><b>BUY:</b> EMA50 &gt; EMA200 aur price EMA200 se upar (uptrend), EMA9 ne EMA21 ko neeche se cross kiya, RSI 50–70.</li>
+        <li><b>SELL:</b> EMA50 &lt; EMA200 aur price EMA200 se neeche (downtrend), EMA9 ne EMA21 ko upar se cross kiya, RSI 30–50.</li>
+        <li>Signal sirf <b>band ho chuki</b> 1H candle par banta hai.</li>
+        <li><b>Fake-signal filter</b> (teeno pass hon tab hi signal): 4H trend same taraf ho, signal candle mazboot ho (body &gt; 50%), aur price EMA21 se 1 ATR se zyada door na ho. Ye 11 mahine ke data par test karke chune gaye hain. ADX aur session filter bhi test kiye gaye the, lekin un se nateeja kharab hua.</li>
+        <li>Lot = (balance × risk%) ÷ (SL distance × 100). 1 lot = 100 oz.</li>
+      </ul>
+      <p class="warn">Ye financial advice nahi hai. Signal ghalat bhi ho sakta hai, isliye SL hamesha lagayein aur utna hi risk lein jitna kho sakein.</p>
+    </section>
+  </main>
+
+  <script src="indicators.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
