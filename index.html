@@ -3,97 +3,200 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0f1115">
-  <meta name="description" content="XAUUSD 1H signal helper: trend, BUY/SELL, SL/TP, lot size aur backtest">
+  <meta name="theme-color" content="#0b0d12">
+  <meta name="description" content="Naseem Trader: 1H BUY/SELL signals with SL/TP, lot size, MT5 order details, backtest and alerts">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <title>Gold Signals</title>
-  <link rel="stylesheet" href="style.css">
+  <title>Naseem Trader</title>
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
   <header class="top">
-    <div>
-      <h1>Gold Signals <span class="tf">XAUUSD · 1H</span></h1>
-      <div class="sub" id="source">Loading…</div>
+    <div class="brand">
+      <img src="icons/icon-192.png?v=4" alt="" width="34" height="34">
+      <div>
+        <h1>Naseem Trader</h1>
+        <button class="market-pill" id="marketPill" type="button">XAUUSD · 1H</button>
+      </div>
     </div>
-    <button class="icon-btn" id="btnRefresh" title="Refresh">⟳</button>
+    <div class="status">
+      <span class="dot" id="statusDot"></span><span id="statusText">Loading</span>
+      <button class="icon-btn" id="btnRefresh" type="button" aria-label="Refresh">⟳</button>
+    </div>
   </header>
 
+  <div class="banner" id="banner" hidden></div>
+
   <main>
-    <section class="card price-card">
-      <div class="price" id="price">—</div>
-      <div class="muted" id="updated">—</div>
-    </section>
-
-    <section class="card signal-card" id="signalCard">
-      <div class="label">Abhi ki position</div>
-      <div class="signal" id="signalText">—</div>
-      <div class="muted" id="signalNote"></div>
-      <div class="levels" id="levels" hidden>
-        <div><span>Entry</span><b id="lvEntry">—</b></div>
-        <div class="sl"><span>Stop Loss</span><b id="lvSL">—</b></div>
-        <div class="tp"><span>TP1 (1R)</span><b id="lvTP1">—</b></div>
-        <div class="tp"><span>TP2 (2R)</span><b id="lvTP2">—</b></div>
-        <div><span>Lot size</span><b id="lvLot">—</b></div>
-        <div><span>Risk</span><b id="lvRisk">—</b></div>
+    <!-- ============ SIGNAL TAB ============ -->
+    <section class="tab" id="tab-signal">
+      <div class="hero">
+        <div class="price" id="price">—</div>
+        <div class="price-meta"><span id="change">—</span> · <span id="source">—</span></div>
       </div>
-      <ul class="checks" id="checks" hidden></ul>
-    </section>
 
-    <section class="card">
-      <div class="label">Market ka haal</div>
-      <div class="grid3">
-        <div><span>Trend</span><b id="mTrend">—</b></div>
-        <div><span>RSI (14)</span><b id="mRsi">—</b></div>
-        <div><span>ATR (14)</span><b id="mAtr">—</b></div>
+      <div class="card signal-card" id="signalCard">
+        <div class="row-between">
+          <span class="label">Signal</span>
+          <span class="chip" id="signalChip">—</span>
+        </div>
+        <div class="signal" id="signalText">—</div>
+        <div class="note" id="signalNote"></div>
+        <div class="warn-box" id="lateWarn" hidden></div>
+
+        <div id="tradeBox" hidden>
+          <div class="pnl" id="pnl"></div>
+          <div class="levels">
+            <div><span>Entry</span><b id="lvEntry">—</b></div>
+            <div class="sl"><span>Stop Loss</span><b id="lvSL">—</b></div>
+            <div class="tp"><span>TP1 (1R)</span><b id="lvTP1">—</b></div>
+            <div class="tp"><span>TP2 (3R)</span><b id="lvTP2">—</b></div>
+          </div>
+        </div>
+        <ul class="checks" id="checks" hidden></ul>
+      </div>
+
+      <div class="card" id="mt5Card" hidden>
+        <div class="row-between">
+          <span class="label">MT5 order</span>
+          <span class="muted small-txt" id="mt5Symbol"></span>
+        </div>
+        <div class="mt5">
+          <div><span>Type</span><b id="mtType">—</b></div>
+          <div><span>Volume</span><b id="mtVol">—</b><button class="copy" data-copy="mtVol" type="button">Copy</button></div>
+          <div><span>Stop Loss</span><b id="mtSL">—</b><button class="copy" data-copy="mtSL" type="button">Copy</button></div>
+          <div><span>Take Profit</span><b id="mtTP">—</b><button class="copy" data-copy="mtTP" type="button">Copy</button></div>
+        </div>
+        <div class="risk-line" id="mtRisk"></div>
+        <details class="howto">
+          <summary>MT5 mein kaise lagayein</summary>
+          <ol>
+            <li>MT5 kholein → apna symbol (<b id="mtSym2">XAUUSD</b>) → <b>New Order</b>.</li>
+            <li><b>Volume</b>, <b>Stop Loss</b> aur <b>Take Profit</b> upar se copy kar ke daalein.</li>
+            <li>Type mein <b>Market Execution</b> rakhein aur <b id="mtBtn">Sell</b> dabayein.</li>
+            <li>Broker ki price app se alag ho to SL/TP ke neeche likha <b>faasla</b> apni entry par lagayein.</li>
+            <li>TP1 par aadha lot band karein aur baqi ka SL entry par le aayein (breakeven).</li>
+          </ol>
+        </details>
+      </div>
+
+      <div class="card chart-card">
+        <div class="row-between">
+          <span class="label">Chart · 1H</span>
+          <span class="legend"><i class="l21"></i>EMA21 <i class="l50"></i>EMA50</span>
+        </div>
+        <canvas id="chart" height="220"></canvas>
+      </div>
+
+      <div class="card">
+        <div class="label">Market ka haal</div>
+        <div class="stats4">
+          <div><span>1H trend</span><b id="mTrend">—</b></div>
+          <div><span>4H trend</span><b id="mHtf">—</b></div>
+          <div><span>RSI 14</span><b id="mRsi">—</b></div>
+          <div><span>ATR 14</span><b id="mAtr">—</b></div>
+        </div>
       </div>
     </section>
 
-    <section class="card">
-      <div class="label">Backtest · <span id="bPeriod">—</span> ka data</div>
-      <table class="bt">
-        <thead><tr><th></th><th>Filter ke saath</th><th>Bina filter</th></tr></thead>
-        <tbody id="btBody"><tr><td colspan="3" class="muted">—</td></tr></tbody>
-      </table>
-      <p class="muted small">Har trade: SL = 1.5×ATR, target = 2R. "Max girawat" = account sab se zyada kitna R neeche gaya. Purana nateeja aage ki guarantee nahi hai.</p>
-    </section>
-
-    <section class="card">
-      <div class="label">Pichle signals</div>
-      <ul class="history" id="history"><li class="muted">—</li></ul>
-    </section>
-
-    <section class="card">
-      <div class="label">Settings</div>
-      <label>Account balance ($)<input type="number" id="setBalance" min="1" step="1" value="1000"></label>
-      <label>Har trade par risk (%)<input type="number" id="setRisk" min="0.1" max="5" step="0.1" value="1"></label>
-      <label class="check"><input type="checkbox" id="setFilter" checked> Fake-signal filter ON (recommended)</label>
-      <label>TwelveData API key (optional, asal XAU/USD ke liye)
-        <input type="text" id="setKey" placeholder="Khali chhorein to Binance PAXG use hoga" autocomplete="off">
-      </label>
-      <div class="row">
-        <button id="btnSave">Save</button>
-        <button id="btnNotify" class="ghost">Alerts ON karein</button>
+    <!-- ============ REPORT TAB ============ -->
+    <section class="tab" id="tab-report" hidden>
+      <div class="card verdict" id="verdictCard">
+        <div class="label">Is market par strategy</div>
+        <div class="verdict-text" id="verdictText">—</div>
+        <div class="note" id="verdictNote"></div>
       </div>
-      <p class="muted small" id="notifyState"></p>
+
+      <div class="card">
+        <div class="label">Backtest · <span id="bPeriod">—</span></div>
+        <table class="bt">
+          <thead><tr><th></th><th>Filter ON</th><th>Filter OFF</th></tr></thead>
+          <tbody id="btBody"><tr><td colspan="3" class="muted">—</td></tr></tbody>
+        </table>
+        <p class="fine">SL 2.5×ATR, target 3R, spread ka kharcha shamil. "Max girawat" = account sab se zyada kitna R neeche gaya.</p>
+      </div>
+
+      <div class="card">
+        <div class="label">Pichle signals</div>
+        <ul class="history" id="history"><li class="muted">—</li></ul>
+      </div>
+
+      <div class="card rules">
+        <div class="label">Signal ke rules</div>
+        <ul>
+          <li><b>BUY:</b> EMA50 &gt; EMA200 aur price EMA200 se upar, EMA9 EMA21 ko neeche se cross kare, RSI 50–70.</li>
+          <li><b>SELL:</b> EMA50 &lt; EMA200 aur price EMA200 se neeche, EMA9 EMA21 ko upar se cross kare, RSI 30–50.</li>
+          <li><b>Fake-signal filter:</b> 4H trend same taraf, signal candle mazboot (body &gt; 50%), price EMA21 se 1 ATR ke andar.</li>
+          <li>Signal sirf <b>band ho chuki</b> 1H candle par banta hai, baad mein badalta nahi.</li>
+          <li><b>SL</b> = 2.5 × ATR. <b>TP1</b> = 1R, <b>TP2</b> = 3R. Trade 72 ghante baad khud band.</li>
+          <li>Weekend (market band) ka data hata diya jata hai.</li>
+        </ul>
+      </div>
     </section>
 
-    <section class="card rules">
-      <div class="label">Rules (app signal kaise deti hai)</div>
-      <ul>
-        <li><b>BUY:</b> EMA50 &gt; EMA200 aur price EMA200 se upar (uptrend), EMA9 ne EMA21 ko neeche se cross kiya, RSI 50–70.</li>
-        <li><b>SELL:</b> EMA50 &lt; EMA200 aur price EMA200 se neeche (downtrend), EMA9 ne EMA21 ko upar se cross kiya, RSI 30–50.</li>
-        <li>Signal sirf <b>band ho chuki</b> 1H candle par banta hai.</li>
-        <li><b>Fake-signal filter</b> (teeno pass hon tab hi signal): 4H trend same taraf ho, signal candle mazboot ho (body &gt; 50%), aur price EMA21 se 1 ATR se zyada door na ho. Ye 11 mahine ke data par test karke chune gaye hain. ADX aur session filter bhi test kiye gaye the, lekin un se nateeja kharab hua.</li>
-        <li>Lot = (balance × risk%) ÷ (SL distance × 100). 1 lot = 100 oz.</li>
-        <li><b>Broker ki price alag ho to:</b> SL/TP ke neeche likha faasla (masalan "Entry se $19.91 upar") apni entry price par lagayein, number seedha copy na karein.</li>
-      </ul>
-      <p class="warn">Ye financial advice nahi hai. Signal ghalat bhi ho sakta hai, isliye SL hamesha lagayein aur utna hi risk lein jitna kho sakein.</p>
+    <!-- ============ SETTINGS TAB ============ -->
+    <section class="tab" id="tab-settings" hidden>
+      <div class="card">
+        <div class="label">Market</div>
+        <select id="setMarket"></select>
+        <p class="fine" id="marketHint"></p>
+      </div>
+
+      <div class="card">
+        <div class="label">Account</div>
+        <label>Balance ($)<input type="number" id="setBalance" min="1" step="1" inputmode="decimal"></label>
+        <label>Har trade par risk (%)<input type="number" id="setRisk" min="0.1" max="5" step="0.1" inputmode="decimal"></label>
+        <details>
+          <summary>Advanced</summary>
+          <label>Contract size (1 lot) <input type="number" id="setContract" min="0.0001" step="any" inputmode="decimal"></label>
+          <p class="fine">MT5 → symbol par right click → Specification → "Contract size". Khali chhorein to default lagega.</p>
+          <label class="check"><input type="checkbox" id="setFilter"> Fake-signal filter ON (recommended)</label>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="label">Data</div>
+        <label>TwelveData API key
+          <input type="text" id="setKey" placeholder="Gold ke liye optional, Silver/Forex ke liye zaroori" autocomplete="off" spellcheck="false">
+        </label>
+        <p class="fine">Free key: twelvedata.com → Sign up → API Keys. Key sirf is phone mein save hoti hai. Is se price MT5 ke zyada qareeb aati hai.</p>
+      </div>
+
+      <button class="primary" id="btnSave" type="button">Save</button>
+
+      <div class="card">
+        <div class="label">Mobile alerts (app band ho tab bhi)</div>
+        <ol class="steps">
+          <li>Play Store / App Store se <b>ntfy</b> app install karein.</li>
+          <li>ntfy mein <b>+</b> dabayein aur ye topic subscribe karein:</li>
+        </ol>
+        <div class="topic"><code id="topic">—</code><button class="copy" id="copyTopic" type="button">Copy</button></div>
+        <a class="link-btn" id="ntfyLink" href="#" target="_blank" rel="noopener">ntfy mein kholein</a>
+        <p class="fine">Har market ka topic alag hai. Jo market upar chuna hai usi ka topic dikhta hai. Cloud har 20 minute baad check karta hai aur naya signal, TP1, TP2 ya SL hone par alert bhejta hai.</p>
+      </div>
+
+      <div class="card">
+        <div class="label">App ke andar alerts</div>
+        <button class="ghost" id="btnNotify" type="button">Notifications ON karein</button>
+        <button class="ghost" id="btnTestNotify" type="button">Test alert</button>
+        <p class="fine" id="notifyState"></p>
+      </div>
+
+      <p class="version">Naseem Trader v2.0</p>
     </section>
   </main>
 
-  <script src="indicators.js"></script>
-  <script src="app.js"></script>
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="signal" type="button"><span>◉</span>Signal</button>
+    <button class="tab-btn" data-tab="report" type="button"><span>▤</span>Report</button>
+    <button class="tab-btn" data-tab="settings" type="button"><span>⚙</span>Settings</button>
+  </nav>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="instruments.js?v=4"></script>
+  <script src="indicators.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
