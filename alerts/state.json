@@ -1,0 +1,21 @@
+{
+  "heartbeat": "2026-11-07T01:50:11.125Z",
+  "markets": {
+    "BTCUSD": {
+      "init": true,
+      "lastSignal": 1791046800000
+    },
+    "ETHUSD": {
+      "init": true,
+      "lastSignal": 1792782000000
+    },
+    "EURUSD": {},
+    "GBPUSD": {},
+    "USDJPY": {},
+    "XAGUSD": {},
+    "XAUUSD": {
+      "init": true,
+      "lastSignal": 1793732400000
+    }
+  }
+}
