@@ -3,12 +3,14 @@
   "markets": {
     "BTCUSD": {
       "init": true,
-      "lastSignal": 1791046800000
+      "lastSignal": 1794168000000
     },
     "ETHUSD": {
       "announced": 1794063600000,
+      "closed": 1794063600000,
       "init": true,
-      "lastSignal": 1794063600000
+      "lastSignal": 1794063600000,
+      "tp1": 1794063600000
     },
     "EURUSD": {},
     "GBPUSD": {},
