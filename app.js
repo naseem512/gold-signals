@@ -92,7 +92,17 @@
     const ch = (price - ref) / ref * 100;
     $('change').innerHTML = `<span class="${ch >= 0 ? 'up' : 'down'}">${ch >= 0 ? '▲' : '▼'} ${fmt(Math.abs(ch))}%</span> 24h`;
     lastSource = source;
-    $('source').textContent = 'Price: ' + source + ' · ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // Price label follows the chosen platform. Binance is only the price feed; MT5 users see the market name, not "Binance".
+    const plat = PLATFORMS.byId(settings.platform);
+    const onBinance = plat.kind.startsWith('binance');
+    const proxy = source.startsWith('Binance') && !onBinance; // feed is not the broker's own price
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    $('source').textContent = (onBinance && source.startsWith('Binance') ? source : inst.id + ' live') + ' · ' + time;
+    $('priceNote').textContent = proxy
+      ? (inst.id === 'XAUUSD' ? plat.short + ' ki price is se 1-3$ alag ho sakti hai. SL/TP ka faasla apni entry par lagayein.'
+        : plat.short + ' ki price is se thori alag ho sakti hai. SL/TP ka faasla apni entry par lagayein.')
+      : '';
+    $('priceNote').hidden = !proxy;
 
     // market stats
     const trend = GS.trendAt(ind, candles, lastClosed);
@@ -352,7 +362,7 @@
     $('signalNote').textContent = note || '';
     $('verdictNote').textContent = '';
     $('signalCard').classList.remove('buy', 'sell', 'wait');
-    ['tradeBox', 'mt5Card', 'checks', 'lateWarn'].forEach(id => ($(id).hidden = true));
+    ['tradeBox', 'mt5Card', 'checks', 'lateWarn', 'priceNote'].forEach(id => ($(id).hidden = true));
     $('btBody').innerHTML = '<tr><td colspan="3" class="muted">—</td></tr>';
     $('history').innerHTML = '<li class="muted">—</li>';
     const cv = $('chart'); cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
