@@ -18,6 +18,14 @@ An installable web app (PWA) that gives 1H BUY/SELL signals with SL/TP, lot size
 
 The parameters sit in the middle of a range that worked on both datasets and both halves of the data (walk-forward). Other markets tested weaker; the app labels each one.
 
+## Trading platforms
+Settings → "Trade kahan lagate hain?" builds the order for the selected platform (`platforms.js`):
+- **MT5 / MT4 / cTrader / any broker:** lots, SL/TP price, points.
+- **Binance Futures (USDⓈ-M):** gold as PAXGUSDT plus BTC and ETH; quantity in coins, minimum isolated leverage, TP/SL.
+- **Binance Spot:** BUY only, with an OCO exit; capped by balance.
+
+Binance is also the default **price source** for gold (PAXG). This is only the price feed; the trade can be placed anywhere.
+
 ## Alerts
 `.github/workflows/alerts.yml` runs `alerts/check.js` every 20 minutes. The job uses the same strategy code as the app and posts to `ntfy.sh/<topic>` for each market (topics are in `instruments.js`). Add a `TWELVEDATA_KEY` repository secret to enable Silver and Forex alerts.
 

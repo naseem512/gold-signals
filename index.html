@@ -9,12 +9,12 @@
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Naseem Trader</title>
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
   <header class="top">
     <div class="brand">
-      <img src="icons/icon-192.png?v=4" alt="" width="34" height="34">
+      <img src="icons/icon-192.png?v=5" alt="" width="34" height="34">
       <div>
         <h1>Naseem Trader</h1>
         <button class="market-pill" id="marketPill" type="button">XAUUSD · 1H</button>
@@ -59,25 +59,15 @@
 
       <div class="card" id="mt5Card" hidden>
         <div class="row-between">
-          <span class="label">MT5 order</span>
+          <span class="label" id="orderTitle">MT5 order</span>
           <span class="muted small-txt" id="mt5Symbol"></span>
         </div>
-        <div class="mt5">
-          <div><span>Type</span><b id="mtType">—</b></div>
-          <div><span>Volume</span><b id="mtVol">—</b><button class="copy" data-copy="mtVol" type="button">Copy</button></div>
-          <div><span>Stop Loss</span><b id="mtSL">—</b><button class="copy" data-copy="mtSL" type="button">Copy</button></div>
-          <div><span>Take Profit</span><b id="mtTP">—</b><button class="copy" data-copy="mtTP" type="button">Copy</button></div>
-        </div>
+        <div class="warn-box" id="orderNA" hidden></div>
+        <div class="mt5" id="orderGrid"></div>
         <div class="risk-line" id="mtRisk"></div>
-        <details class="howto">
-          <summary>MT5 mein kaise lagayein</summary>
-          <ol>
-            <li>MT5 kholein → apna symbol (<b id="mtSym2">XAUUSD</b>) → <b>New Order</b>.</li>
-            <li><b>Volume</b>, <b>Stop Loss</b> aur <b>Take Profit</b> upar se copy kar ke daalein.</li>
-            <li>Type mein <b>Market Execution</b> rakhein aur <b id="mtBtn">Sell</b> dabayein.</li>
-            <li>Broker ki price app se alag ho to SL/TP ke neeche likha <b>faasla</b> apni entry par lagayein.</li>
-            <li>TP1 par aadha lot band karein aur baqi ka SL entry par le aayein (breakeven).</li>
-          </ol>
+        <details class="howto" id="orderHow">
+          <summary id="orderHowTitle">Order kaise lagayein</summary>
+          <ol id="orderSteps"></ol>
         </details>
       </div>
 
@@ -144,6 +134,12 @@
       </div>
 
       <div class="card">
+        <div class="label">Trade kahan lagate hain?</div>
+        <select id="setPlatform"></select>
+        <p class="fine" id="platformHint"></p>
+      </div>
+
+      <div class="card">
         <div class="label">Account</div>
         <label>Balance ($)<input type="number" id="setBalance" min="1" step="1" inputmode="decimal"></label>
         <label>Har trade par risk (%)<input type="number" id="setRisk" min="0.1" max="5" step="0.1" inputmode="decimal"></label>
@@ -156,11 +152,11 @@
       </div>
 
       <div class="card">
-        <div class="label">Data</div>
+        <div class="label">Price data (sirf chart aur signal ke liye)</div>
         <label>TwelveData API key
           <input type="text" id="setKey" placeholder="Gold ke liye optional, Silver/Forex ke liye zaroori" autocomplete="off" spellcheck="false">
         </label>
-        <p class="fine">Free key: twelvedata.com → Sign up → API Keys. Key sirf is phone mein save hoti hai. Is se price MT5 ke zyada qareeb aati hai.</p>
+        <p class="fine">Ye sirf <b>price dekhne</b> ke liye hai, trade yahan nahi lagti. Bina key ke Gold ki price Binance PAXG se aati hai (MT5 se 1-3$ farq ho sakta hai, is liye SL/TP ka faasla bhi dikhaya jata hai). Free key: twelvedata.com → Sign up → API Keys. Is se gold ki price MT5 ke zyada qareeb aati hai. Key sirf is phone mein save hoti hai.</p>
       </div>
 
       <button class="primary" id="btnSave" type="button">Save</button>
@@ -183,7 +179,7 @@
         <p class="fine" id="notifyState"></p>
       </div>
 
-      <p class="version">Naseem Trader v2.0</p>
+      <p class="version">Naseem Trader v2.1</p>
     </section>
   </main>
 
@@ -195,8 +191,9 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="instruments.js?v=4"></script>
-  <script src="indicators.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="instruments.js?v=5"></script>
+  <script src="indicators.js?v=5"></script>
+  <script src="platforms.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

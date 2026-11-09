@@ -1,6 +1,6 @@
 {
   "name": "naseem-trader",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "description": "Naseem Trader: 1H trend signals with fake-signal filter, SL/TP, lot size, backtest and ntfy cloud alerts",
   "scripts": {

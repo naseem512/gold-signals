@@ -11,6 +11,7 @@
 
   const settings = {
     market: store.get('nt_market', 'XAUUSD'),
+    platform: store.get('nt_platform', 'mt5'),
     balance: parseFloat(store.get('nt_balance', store.get('gs_balance', '1000'))) || 1000,
     risk: parseFloat(store.get('nt_risk', store.get('gs_risk', '1'))) || 1,
     contract: store.get('nt_contract', ''),
@@ -18,7 +19,7 @@
     filter: store.get('nt_filter', store.get('gs_filter', '1')) === '1',
   };
   let inst = MARKETS.byId(settings.market);
-  let timer = null, loading = false, lastView = null, loadSeq = 0;
+  let timer = null, loading = false, lastView = null, loadSeq = 0, lastSource = '', lastData = null;
 
   // ---------- formatting ----------
   const fmtP = (n, d = inst.digits) => n == null || !isFinite(n) ? '—' : Number(n).toFixed(d);
@@ -90,7 +91,8 @@
     const ref = candles[Math.max(0, last - 24)].c;
     const ch = (price - ref) / ref * 100;
     $('change').innerHTML = `<span class="${ch >= 0 ? 'up' : 'down'}">${ch >= 0 ? '▲' : '▼'} ${fmt(Math.abs(ch))}%</span> 24h`;
-    $('source').textContent = source + ' · ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    lastSource = source;
+    $('source').textContent = 'Price: ' + source + ' · ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     // market stats
     const trend = GS.trendAt(ind, candles, lastClosed);
@@ -145,10 +147,13 @@
     else if (progR < -0.5) warn = `Price SL ki taraf ja rahi hai (${fmt(progR, 1)}R). Nayi entry soch samajh kar lein.`;
     if (warn) { $('lateWarn').textContent = warn; $('lateWarn').hidden = false; }
 
-    const lot = GS.lotSize(settings.balance, settings.risk, active.slDist, usdPerPoint(price));
-    const useLots = lot.lots > 0 ? lot.lots : 0.01;
-    const riskUsd = useLots * active.slDist * usdPerPoint(price);
-    $('pnl').innerHTML = `Abhi: <b class="${progR >= 0 ? 'up' : 'down'}">${progR >= 0 ? '+' : ''}${fmt(progR, 2)}R</b> · ${money(progR * riskUsd)} (${useLots.toFixed(2)} lot)`;
+    const order = PLATFORMS.orderFor(settings.platform, inst, active, {
+      balance: settings.balance, riskPct: settings.risk, usdPerPoint: usdPerPoint(price), price,
+    });
+    // P/L uses the platform's size; if the market isn't on this platform, fall back to MT5 lots for the estimate.
+    const sized = order.available ? order : PLATFORMS.orderFor('mt5', inst, active, { balance: settings.balance, riskPct: settings.risk, usdPerPoint: usdPerPoint(price), price });
+    const riskUsd = sized.risk.usd;
+    $('pnl').innerHTML = `Abhi: <b class="${progR >= 0 ? 'up' : 'down'}">${progR >= 0 ? '+' : ''}${fmt(progR, 2)}R</b> · ${money(progR * riskUsd)} (${esc(sized.sizeText)})`;
 
     const dist = (lvl, above) => `${fmtP(lvl)}<small>Entry se ${fmtP(Math.abs(lvl - active.entry))} ${above ? 'upar' : 'neeche'}</small>`;
     $('lvEntry').innerHTML = `${fmtP(active.entry)}<small>Broker par jo price mile</small>`;
@@ -158,22 +163,26 @@
     $('tradeBox').hidden = false;
     renderChecks(settings.filter ? active.checks : null);
 
-    // MT5 order panel
-    const pointSize = Math.pow(10, -inst.digits);
-    $('mt5Card').hidden = false;
-    $('mt5Symbol').textContent = inst.id;
-    $('mtSym2').textContent = inst.id;
-    $('mtType').textContent = (dir > 0 ? 'Buy' : 'Sell') + ' (Market)';
-    $('mtBtn').textContent = dir > 0 ? 'Buy by Market' : 'Sell by Market';
-    $('mtVol').textContent = useLots.toFixed(2);
-    $('mtSL').textContent = fmtP(active.sl);
-    $('mtTP').textContent = fmtP(active.tp2);
-    const pct = riskUsd / settings.balance * 100;
-    const tooBig = lot.lots === 0;
-    $('mtRisk').innerHTML = `Risk: <span class="${tooBig ? 'bad' : ''}">${money(riskUsd)} (${fmt(pct, 1)}%)</span> · SL ${Math.round(active.slDist / pointSize)} points`
-      + (tooBig ? `<br><span class="bad">Balance ke hisaab se 0.01 lot bhi ${fmt(settings.risk, 1)}% se zyada risk hai.</span>` : '');
-
+    renderOrder(order);
     maybeNotify(active);
+  }
+
+  function renderOrder(order) {
+    $('mt5Card').hidden = false;
+    $('orderTitle').textContent = order.title;
+    $('mt5Symbol').textContent = inst.id;
+    $('orderNA').hidden = order.available;
+    $('orderGrid').hidden = $('mtRisk').hidden = $('orderHow').hidden = !order.available;
+    if (!order.available) { $('orderNA').textContent = order.reason; return; }
+    $('orderGrid').innerHTML = order.fields.map((f, i) =>
+      `<div><span>${esc(f.label)}</span><b id="of${i}">${esc(f.value)}</b>${f.copy ? `<button class="copy" data-copy="of${i}" type="button">Copy</button>` : ''}</div>`).join('');
+    const r = order.risk;
+    const extra = order.extra.filter(x => !(x.startsWith('Gold = PAXGUSDT') && !lastSource.startsWith('Binance')));
+    $('mtRisk').innerHTML = `Risk: <span class="${r.tooBig ? 'bad' : ''}">${money(r.usd)} (${fmt(r.pct, 1)}%)</span>`
+      + extra.map(x => ' · ' + esc(x)).join('')
+      + (r.tooBig ? `<br><span class="bad">Balance ke hisaab se sab se chhota order bhi ${fmt(settings.risk, 1)}% se zyada risk hai.</span>` : '');
+    $('orderHowTitle').textContent = order.platform.short + ' mein kaise lagayein';
+    $('orderSteps').innerHTML = order.steps.map(x => `<li>${x}</li>`).join(''); // steps are built by platforms.js from numbers only
   }
 
   function renderChecks(checks) {
@@ -373,7 +382,7 @@
   }
 
   function applyMarketUI() {
-    $('marketPill').textContent = inst.id + ' · 1H';
+    $('marketPill').textContent = inst.id + ' · 1H · ' + PLATFORMS.byId(settings.platform).short;
     const topic = MARKETS.topicFor(inst.id);
     $('topic').textContent = topic;
     $('ntfyLink').href = 'https://ntfy.sh/' + topic;
@@ -392,6 +401,7 @@
     try {
       const { candles, source } = await loadCandles();
       if (seq !== loadSeq || forInst !== inst.id) return; // market changed meanwhile
+      lastData = { candles, source };
       render(candles, source);
     } catch (e) {
       setStatus('err', 'Error');
@@ -414,6 +424,16 @@
   $('setMarket').innerHTML = MARKETS.INSTRUMENTS.map(m =>
     `<option value="${m.id}">${m.name} (${m.id})${m.tested === 'strong' ? ' ✓ Mazboot' : m.tested === 'loss' ? ' ✗ Ghaata' : ' ⚠ Kamzor'}</option>`).join('');
   $('setMarket').value = inst.id;
+  $('setPlatform').innerHTML = PLATFORMS.PLATFORMS.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  $('setPlatform').value = PLATFORMS.byId(settings.platform).id;
+  const platformHint = () => {
+    const p = PLATFORMS.byId($('setPlatform').value);
+    const m = MARKETS.byId($('setMarket').value);
+    const na = p.kind.startsWith('binance') && !PLATFORMS.BINANCE[m.id];
+    $('platformHint').innerHTML = esc(p.hint) + (na ? `<br><span class="bad">${esc(m.name)} Binance par nahi milta. Is market ke liye MT5 chunein.</span>` : '');
+  };
+  platformHint();
+  $('setPlatform').addEventListener('change', platformHint);
   $('setBalance').value = settings.balance;
   $('setRisk').value = settings.risk;
   $('setContract').value = settings.contract;
@@ -424,22 +444,25 @@
   $('setMarket').addEventListener('change', () => {
     const m = MARKETS.byId($('setMarket').value);
     $('marketHint').textContent = MARKETS.TEST_NOTE[m.tested] + (m.td && !m.binance ? ' Is market ke liye TwelveData key zaroori hai.' : '');
+    platformHint();
   });
 
   $('btnSave').addEventListener('click', () => {
     const b = parseFloat($('setBalance').value), r = parseFloat($('setRisk').value), c = $('setContract').value.trim();
     const changedMarket = settings.market !== $('setMarket').value;
     settings.market = $('setMarket').value;
+    settings.platform = $('setPlatform').value;
     settings.balance = b > 0 ? b : 1000;
     settings.risk = r > 0 && r <= 5 ? r : 1;
     settings.contract = parseFloat(c) > 0 ? c : '';
     settings.key = $('setKey').value.trim();
     settings.filter = $('setFilter').checked;
     store.set('nt_market', settings.market); store.set('nt_balance', settings.balance); store.set('nt_risk', settings.risk);
-    store.set('nt_contract', settings.contract); store.set('nt_key', settings.key); store.set('nt_filter', settings.filter ? '1' : '0');
+    store.set('nt_contract', settings.contract); store.set('nt_key', settings.key); store.set('nt_filter', settings.filter ? '1' : '0'); store.set('nt_platform', settings.platform);
     $('setBalance').value = settings.balance; $('setRisk').value = settings.risk; $('setContract').value = settings.contract;
     inst = MARKETS.byId(settings.market);
-    if (changedMarket) clearView('Loading…');
+    if (changedMarket) { clearView('Loading…'); lastData = null; }
+    else if (lastData) render(lastData.candles, lastData.source); // platform/risk change shows instantly
     applyMarketUI();
     toast('Save ho gaya' + (changedMarket ? ': ab ' + inst.id + ' ke signal' : ''));
     schedule();
@@ -447,8 +470,10 @@
     if (changedMarket) showTab('signal');
   });
 
-  document.querySelectorAll('.copy[data-copy]').forEach(btn =>
-    btn.addEventListener('click', () => copyText($(btn.dataset.copy).textContent)));
+  $('orderGrid').addEventListener('click', e => {
+    const btn = e.target.closest('.copy[data-copy]');
+    if (btn) copyText($(btn.dataset.copy).textContent);
+  });
   $('copyTopic').addEventListener('click', () => copyText($('topic').textContent));
 
   $('btnNotify').addEventListener('click', async () => {

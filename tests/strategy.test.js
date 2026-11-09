@@ -182,3 +182,58 @@ test('alert job: replaying history gives signal -> (TP1) -> result, in order, ne
   const signalsInWindow = bt.trades.filter(t => t.index >= 1201).length;
   assert.equal(log.filter(e => / signal$/.test(e.title)).length, signalsInWindow);
 });
+
+// ---------- trading platforms ----------
+const P = require('../platforms.js');
+const M = require('../instruments.js');
+const gold = M.byId('XAUUSD');
+const buy = { side: 'BUY', entry: 2000, sl: 1990, tp1: 2010, tp2: 2030, slDist: 10 };
+const sell = { side: 'SELL', entry: 2000, sl: 2010, tp1: 1990, tp2: 1970, slDist: 10 };
+const acct = { balance: 1000, riskPct: 1, usdPerPoint: 100, price: 2000 };
+const field = (o, label) => o.fields.find(f => f.label.startsWith(label)).value;
+
+test('MT5/MT4/cTrader: lots match lotSize and SL/TP are the signal prices', () => {
+  for (const id of ['mt5', 'mt4', 'ctrader', 'other']) {
+    const o = P.orderFor(id, gold, buy, { ...acct, balance: 10000 });
+    assert.ok(o.available);
+    assert.equal(o.size, GS.lotSize(10000, 1, 10, 100).lots); // $100 risk / ($10 x 100) = 0.10
+    assert.equal(o.size, 0.1);
+    near(o.risk.usd, 100);
+    assert.equal(field(o, 'Stop Loss'), '1990.00');
+    assert.equal(field(o, 'Take Profit'), '2030.00');
+  }
+});
+
+test('MT5: tiny balance falls back to 0.01 lot and flags the extra risk', () => {
+  const o = P.orderFor('mt5', gold, sell, acct); // $10 risk < 0.01 lot x $10 x 100 = $10? exactly equal -> 0.01
+  assert.equal(o.size, 0.01); assert.equal(o.risk.tooBig, false);
+  const small = P.orderFor('mt5', gold, sell, { ...acct, balance: 500 });
+  assert.equal(small.size, 0.01); assert.equal(small.risk.tooBig, true);
+  assert.match(field(small, 'Type'), /^Sell/);
+});
+
+test('Binance Futures: quantity in coins risks the budget, SELL allowed, gold maps to PAXGUSDT', () => {
+  const o = P.orderFor('binance-futures', gold, sell, acct);
+  assert.ok(o.available);
+  assert.equal(field(o, 'Symbol'), 'PAXGUSDT');
+  assert.equal(field(o, 'Quantity'), '1.000');         // $10 risk / $10 SL distance = 1 PAXG
+  near(o.risk.usd, 10);
+  assert.match(field(o, 'Side'), /Short/);
+  assert.equal(field(o, 'Leverage'), '2x Isolated');   // 2000 USDT position on a 1000 balance
+});
+
+test('Binance Spot: BUY only, capped by balance; SELL and non-Binance markets are unavailable', () => {
+  assert.equal(P.orderFor('binance-spot', gold, sell, acct).available, false);
+  const o = P.orderFor('binance-spot', gold, buy, { ...acct, riskPct: 5 }); // wants 5 PAXG = 10000 USDT, has 1000
+  assert.ok(o.available);
+  assert.equal(o.size, 0.5);
+  assert.ok(o.risk.usd < 50 && o.risk.usd > 0);
+  for (const id of ['binance-spot', 'binance-futures']) assert.equal(P.orderFor(id, M.byId('EURUSD'), buy, acct).available, false);
+});
+
+test('Every platform produces steps for every market without throwing', () => {
+  for (const p of P.PLATFORMS) for (const inst of M.INSTRUMENTS) {
+    const o = P.orderFor(p.id, inst, buy, acct);
+    assert.ok(o.available ? o.steps.length >= 3 : o.reason.length > 10, p.id + ' ' + inst.id);
+  }
+});
