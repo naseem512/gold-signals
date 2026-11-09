@@ -26,6 +26,12 @@ Settings → "Trade kahan lagate hain?" builds the order for the selected platfo
 
 Binance is also the default **price source** for gold (PAXG). This is only the price feed; the trade can be placed anywhere.
 
+## Spot gold calibration
+PAXG trades a few dollars away from spot gold (about $11 below spot in Nov 2026), and MT5 brokers quote spot. On each refresh the app and the alert job read a free spot quote (`api.gold-api.com/price/XAU`, no key) and shift the PAXG candles by the gap. Signals do not change, because EMA crosses, RSI, ATR and the filters are unaffected by a constant shift (a test checks this); only the price levels move onto spot. A quote that is stale (over 20 minutes old, e.g. at the weekend) or more than 3% away is ignored. The app then uses the last good gap for up to 3 days, or else shows the raw PAXG price with a warning. Binance platforms always see raw PAXG.
+
+## Signal card for beginners
+"Aapko kya karna hai" gives numbered steps: the side and size to open, the Stop Loss, the Take Profit, and what to do at TP1. When entry is no longer sensible (TP1 already hit, price moved more than 0.3R, price near SL, market closed or data stale), it says "Nayi trade na lagayein" and shows what to do only for people already in the trade.
+
 ## Alerts
 `.github/workflows/alerts.yml` runs `alerts/check.js` every 20 minutes. The job uses the same strategy code as the app and posts to `ntfy.sh/<topic>` for each market (topics are in `instruments.js`). Add a `TWELVEDATA_KEY` repository secret to enable Silver and Forex alerts.
 

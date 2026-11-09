@@ -9,12 +9,12 @@
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Naseem Trader</title>
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
   <header class="top">
     <div class="brand">
-      <img src="icons/icon-192.png?v=6" alt="" width="34" height="34">
+      <img src="icons/icon-192.png?v=8" alt="" width="34" height="34">
       <div>
         <h1>Naseem Trader</h1>
         <button class="market-pill" id="marketPill" type="button">XAUUSD · 1H</button>
@@ -44,7 +44,7 @@
         </div>
         <div class="signal" id="signalText">—</div>
         <div class="note" id="signalNote"></div>
-        <div class="warn-box" id="lateWarn" hidden></div>
+        <div class="action" id="actionBox" hidden></div>
 
         <div id="tradeBox" hidden>
           <div class="pnl" id="pnl"></div>
@@ -157,7 +157,7 @@
         <label>TwelveData API key
           <input type="text" id="setKey" placeholder="Gold ke liye optional, Silver/Forex ke liye zaroori" autocomplete="off" spellcheck="false">
         </label>
-        <p class="fine">Ye sirf <b>price dekhne</b> ke liye hai, trade yahan nahi lagti. Bina key ke Gold ki price Binance PAXG se aati hai (MT5 se 1-3$ farq ho sakta hai, is liye SL/TP ka faasla bhi dikhaya jata hai). Free key: twelvedata.com → Sign up → API Keys. Is se gold ki price MT5 ke zyada qareeb aati hai. Key sirf is phone mein save hoti hai.</p>
+        <p class="fine">Ye sirf <b>price dekhne</b> ke liye hai, trade yahan nahi lagti. Bina key ke Gold ka chart Binance PAXG se banta hai aur asal gold (spot) price ke mutabiq khud adjust ho jata hai, taa ke levels MT5 se milein. Free key (twelvedata.com → Sign up → API Keys) se seedha XAU/USD data aata hai. Key sirf is phone mein save hoti hai.</p>
       </div>
 
       <button class="primary" id="btnSave" type="button">Save</button>
@@ -180,7 +180,7 @@
         <p class="fine" id="notifyState"></p>
       </div>
 
-      <p class="version">Naseem Trader v2.2</p>
+      <p class="version">Naseem Trader v2.4</p>
     </section>
   </main>
 
@@ -192,9 +192,9 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="instruments.js?v=6"></script>
-  <script src="indicators.js?v=6"></script>
-  <script src="platforms.js?v=6"></script>
-  <script src="app.js?v=6"></script>
+  <script src="instruments.js?v=8"></script>
+  <script src="indicators.js?v=8"></script>
+  <script src="platforms.js?v=8"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

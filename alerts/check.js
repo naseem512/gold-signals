@@ -55,7 +55,16 @@ async function twelve(symbol) {
 async function candlesFor(inst) {
   let c;
   if (inst.td && KEY) c = await twelve(inst.td);
-  else if (inst.binance) c = await binance(inst.binance);
+  else if (inst.binance) {
+    c = await binance(inst.binance);
+    if (inst.spot) { // alerts go to MT5 users: put PAXG levels onto spot gold
+      try {
+        const off = M.spotOffset(await getJSON(M.SPOT_URL(inst.spot), 2), c[c.length - 1].c, Date.now());
+        if (off != null) { c = GS.shiftCandles(c, off); console.log(`${inst.id}: spot offset ${off.toFixed(2)}`); }
+        else console.log(`${inst.id}: spot quote stale, using feed price`);
+      } catch (e) { console.log(`${inst.id}: spot quote failed (${e.message}), using feed price`); }
+    }
+  }
   else return null; // needs a TwelveData key we don't have
   return inst.closesWeekend ? GS.marketCandles(c) : c;
 }
@@ -74,18 +83,21 @@ async function notify(inst, { title, body, tags, priority }) {
 
 function fmt(inst, n) { return Number(n).toFixed(inst.digits); }
 
+// Written for someone with no trading experience: what to press, where SL and TP go, what to do at TP1.
 function signalMessage(inst, t) {
-  const d = (a, b) => fmt(inst, Math.abs(a - b));
+  const buy = t.side === 'BUY';
+  const up = buy ? 'upar' : 'neeche', down = buy ? 'neeche' : 'upar';
   return {
-    title: `${inst.id} ${t.side} signal`,
-    tags: t.side === 'BUY' ? 'green_circle,chart_with_upwards_trend' : 'red_circle,chart_with_downwards_trend',
+    title: `${inst.id}: abhi ${t.side} karein`,
+    tags: buy ? 'green_circle,chart_with_upwards_trend' : 'red_circle,chart_with_downwards_trend',
     priority: 5,
     body: [
-      `Entry: ${fmt(inst, t.entry)}`,
-      `SL: ${fmt(inst, t.sl)}  (${d(t.sl, t.entry)} door)`,
-      `TP1: ${fmt(inst, t.tp1)}  (${d(t.tp1, t.entry)} door)`,
-      `TP2: ${fmt(inst, t.tp2)}  (${d(t.tp2, t.entry)} door)`,
-      'Broker ki price alag ho to faasla apni entry par lagayein. Lot size app mein dekhein.',
+      `${buy ? 'Buy' : 'Sell'} ka order kholein (price takreeban ${fmt(inst, t.entry)}).`,
+      `Stop Loss: ${fmt(inst, t.sl)}`,
+      `Take Profit: ${fmt(inst, t.tp2)}`,
+      `Price ${fmt(inst, t.tp1)} par aaye to aadha lot band karein aur SL entry par le aayein.`,
+      `Broker ki price alag ho to SL apni entry se ${fmt(inst, t.slDist)} ${down}, TP ${fmt(inst, Math.abs(t.tp2 - t.entry))} ${up}.`,
+      'Lot size ke liye app kholein.',
     ].join('\n'),
   };
 }

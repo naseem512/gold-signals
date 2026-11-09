@@ -216,9 +216,16 @@
     return { lots, riskUsd: lots * slDist * contract, minLotRisk: 0.01 * slDist * contract };
   }
 
+  // Move every price by a constant (PAXG -> spot gold). Signals don't change: EMA crosses, RSI, ATR,
+  // candle body and distance-to-EMA are all unaffected by adding the same amount to every price.
+  function shiftCandles(candles, off) {
+    if (!off) return candles;
+    return candles.map(c => ({ t: c.t, o: c.o + off, h: c.h + off, l: c.l + off, c: c.c + off }));
+  }
+
   const api = {
     CONFIG, HOUR, isMarketClosed, marketCandles, ema, rsi, atr, htfTrend, computeAll, trendAt,
-    filterChecks, signalAt, resolve, backtest, lotSize,
+    filterChecks, signalAt, resolve, backtest, lotSize, shiftCandles,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GS = api;

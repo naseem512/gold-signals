@@ -173,14 +173,14 @@ test('alert job: replaying history gives signal -> (TP1) -> result, in order, ne
   // every result/TP1 must follow its own signal, and each signal produces at most one TP1 and one result
   let open = false, tp1 = false;
   for (const e of log) {
-    if (/ signal$/.test(e.title)) { assert.equal(open, false, 'new signal while previous still open at ' + e.i); open = true; tp1 = false; }
+    if (/: abhi (BUY|SELL) karein$/.test(e.title)) { assert.equal(open, false, 'new signal while previous still open at ' + e.i); open = true; tp1 = false; }
     else if (/TP1 hit$/.test(e.title)) { assert.ok(open && !tp1, 'TP1 without open signal at ' + e.i); tp1 = true; }
     else { assert.ok(open, 'result without signal at ' + e.i); open = false; }
   }
   // the alerts must match the app's own backtest over the same window
   const bt = GS.backtest(m, GS.computeAll(m), m.length - 1, true, inst.cost);
   const signalsInWindow = bt.trades.filter(t => t.index >= 1201).length;
-  assert.equal(log.filter(e => / signal$/.test(e.title)).length, signalsInWindow);
+  assert.equal(log.filter(e => /: abhi (BUY|SELL) karein$/.test(e.title)).length, signalsInWindow);
 });
 
 // ---------- trading platforms ----------
@@ -236,4 +236,35 @@ test('Every platform produces steps for every market without throwing', () => {
     const o = P.orderFor(p.id, inst, buy, acct);
     assert.ok(o.available ? o.steps.length >= 3 : o.reason.length > 10, p.id + ' ' + inst.id);
   }
+});
+
+// ---------- spot gold calibration (PAXG -> XAUUSD) ----------
+test('shifting prices onto spot keeps every signal and moves levels by exactly the offset', () => {
+  const m = GS.marketCandles(fixture);
+  const off = 11.37;
+  const s = GS.shiftCandles(m, off);
+  for (const filter of [true, false]) { // filtered (~7 trades) and unfiltered (more) runs
+    const a = GS.backtest(m, GS.computeAll(m), m.length - 1, filter, 0.5);
+    const b = GS.backtest(s, GS.computeAll(s), s.length - 1, filter, 0.5);
+    assert.ok(a.trades.length > 5);
+    assert.equal(b.trades.length, a.trades.length);
+    assert.equal(b.rejected.length, a.rejected.length);
+    a.trades.forEach((t, k) => {
+      const u = b.trades[k];
+      assert.equal(u.time, t.time); assert.equal(u.side, t.side); assert.equal(u.exit, t.exit);
+      near(u.entry - t.entry, off, 1e-6); near(u.sl - t.sl, off, 1e-6); near(u.tp2 - t.tp2, off, 1e-6);
+      near(u.r, t.r, 1e-6);
+    });
+  }
+});
+
+test('spot offset: fresh quote accepted, stale/implausible/broken replies rejected', () => {
+  const now = Date.parse('2026-11-09T02:20:00Z');
+  const q = (price, at) => ({ price, updatedAt: at });
+  near(M.spotOffset(q(4128.4, '2026-11-09T02:18:24Z'), 4117.5, now), 10.9, 1e-6);
+  assert.equal(M.spotOffset(q(4128.4, '2026-11-08T22:00:00Z'), 4117.5, now), null); // frozen (weekend)
+  assert.equal(M.spotOffset(q(4500, '2026-11-09T02:18:24Z'), 4117.5, now), null);   // >3% apart
+  assert.equal(M.spotOffset(q('x', '2026-11-09T02:18:24Z'), 4117.5, now), null);
+  assert.equal(M.spotOffset(null, 4117.5, now), null);
+  assert.equal(M.spotOffset({}, 4117.5, now), null);
 });

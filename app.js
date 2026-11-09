@@ -19,7 +19,7 @@
     filter: store.get('nt_filter', store.get('gs_filter', '1')) === '1',
   };
   let inst = MARKETS.byId(settings.market);
-  let timer = null, loading = false, lastView = null, loadSeq = 0, lastSource = '', lastData = null;
+  let timer = null, loading = false, lastView = null, loadSeq = 0, lastSource = '', lastData = null, mkt = { closed: false, stale: false };
 
   // ---------- formatting ----------
   const fmtP = (n, d = inst.digits) => n == null || !isFinite(n) ? '—' : Number(n).toFixed(d);
@@ -57,19 +57,47 @@
     }));
   }
 
+  // Gap between the Binance feed (PAXG) and spot gold. Falls back to the last good value (up to 3 days,
+  // e.g. over the weekend when the spot quote is frozen), else null = show the raw feed with a warning.
+  async function fetchSpotOffset(feedPrice) {
+    const key = 'nt_spot_' + inst.id;
+    try {
+      const ctl = new AbortController();
+      const tm = setTimeout(() => ctl.abort(), 6000);
+      const res = await fetch(MARKETS.SPOT_URL(inst.spot), { cache: 'no-store', signal: ctl.signal });
+      clearTimeout(tm);
+      const off = MARKETS.spotOffset(await res.json(), feedPrice, Date.now());
+      if (off != null) { store.set(key, JSON.stringify({ off, t: Date.now() })); return off; }
+    } catch { /* fall through to the saved value */ }
+    try {
+      const saved = JSON.parse(store.get(key, 'null'));
+      if (saved && Date.now() - saved.t < 72 * H && isFinite(saved.off)) return saved.off;
+    } catch { /* ignore */ }
+    return null;
+  }
+
   async function loadCandles() {
-    let candles, source;
+    let candles, source, offset = null;
     if (inst.td && settings.key) { candles = await fetchTwelve(inst.td, settings.key); source = 'TwelveData ' + inst.td; }
-    else if (inst.binance) { candles = await fetchBinance(inst.binance); source = 'Binance ' + inst.binance; }
+    else if (inst.binance) {
+      candles = await fetchBinance(inst.binance); source = 'Binance ' + inst.binance;
+      if (inst.spot) offset = await fetchSpotOffset(candles[candles.length - 1].c);
+    }
     else throw Object.assign(new Error(`${inst.name} ke liye TwelveData API key chahiye (Settings).`), { needKey: true });
     if (inst.closesWeekend) candles = GS.marketCandles(candles);
     if (candles.length < 300) throw new Error('Data kam hai (' + candles.length + ' candles)');
-    return { candles, source };
+    return { candles, source, offset };
   }
 
   // ---------- render ----------
-  function render(candles, source) {
+  function render(rawCandles, source, offset) {
     const now = Date.now();
+    // MT5 / cTrader / other brokers quote spot gold: shift the PAXG feed onto spot. Binance users trade PAXG itself.
+    const plat = PLATFORMS.byId(settings.platform);
+    const onBinance = plat.kind.startsWith('binance');
+    const fromBinance = source.startsWith('Binance');
+    const calibrated = offset != null && fromBinance && !onBinance;
+    const candles = calibrated ? GS.shiftCandles(rawCandles, offset) : rawCandles;
     const last = candles.length - 1;
     const lastClosed = candles[last].t + H > now ? last - 1 : last;
     const ind = GS.computeAll(candles);
@@ -82,6 +110,7 @@
     // status + banner
     const closed = inst.closesWeekend && GS.isMarketClosed(now);
     const stale = !closed && now - (candles[last].t + H) > 2 * H;
+    mkt = { closed, stale };
     setStatus(closed ? 'closed' : stale ? 'err' : 'live', closed ? 'Market band' : stale ? 'Data purana' : 'Live');
     showBanner(closed ? 'Market abhi band hai (weekend). Naye signal market khulne par aayenge.'
       : stale ? 'Data ' + Math.round((now - candles[last].t) / H) + ' ghante purana hai. Internet ya data source check karein.' : '', stale);
@@ -93,16 +122,16 @@
     $('change').innerHTML = `<span class="${ch >= 0 ? 'up' : 'down'}">${ch >= 0 ? '▲' : '▼'} ${fmt(Math.abs(ch))}%</span> 24h`;
     lastSource = source;
     // Price label follows the chosen platform. Binance is only the price feed; MT5 users see the market name, not "Binance".
-    const plat = PLATFORMS.byId(settings.platform);
-    const onBinance = plat.kind.startsWith('binance');
-    const proxy = source.startsWith('Binance') && !onBinance; // feed is not the broker's own price
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    $('source').textContent = (onBinance && source.startsWith('Binance') ? source : inst.id + ' live') + ' · ' + time;
-    $('priceNote').textContent = proxy
-      ? (inst.id === 'XAUUSD' ? plat.short + ' ki price is se 1-3$ alag ho sakti hai. SL/TP ka faasla apni entry par lagayein.'
-        : plat.short + ' ki price is se thori alag ho sakti hai. SL/TP ka faasla apni entry par lagayein.')
-      : '';
-    $('priceNote').hidden = !proxy;
+    const proxy = fromBinance && !onBinance && !calibrated; // raw feed shown to a broker user
+    $('source').textContent = (onBinance && fromBinance ? source : inst.id + (calibrated ? ' spot' : ' live')) + ' · ' + time;
+    $('priceNote').textContent = calibrated
+      ? `Asal gold (spot) price. ${plat.short} par broker ke spread ki wajah se thora sa farq ho sakta hai.`
+      : proxy
+        ? (inst.spot ? `Asal gold price abhi nahi mil saki. Ye PAXG price hai jo ${plat.short} se kuch dollar alag hoti hai. SL/TP ka faasla apni entry par lagayein.`
+          : `${plat.short} ki price is se thori alag ho sakti hai. SL/TP ka faasla apni entry par lagayein.`)
+        : '';
+    $('priceNote').hidden = !(calibrated || proxy);
 
     // market stats
     const trend = GS.trendAt(ind, candles, lastClosed);
@@ -121,7 +150,6 @@
     card.classList.remove('buy', 'sell', 'wait');
     const lastTrade = bt.trades[bt.trades.length - 1];
     const active = lastTrade && lastTrade.result === 'open' ? lastTrade : null;
-    $('lateWarn').hidden = true;
 
     if (!active) {
       card.classList.add('wait');
@@ -130,7 +158,13 @@
       $('tradeBox').hidden = true;
       $('mt5Card').hidden = true;
       const raw = GS.signalAt(ind, candles, lastClosed);
-      if (raw && settings.filter && !raw.passed) {
+      const rejected = raw && settings.filter && !raw.passed;
+      renderAction({ kind: 'wait', why: mkt.closed ? 'Market abhi band hai (weekend).'
+        : rejected ? `${raw.side} ka signal bana tha lekin wo fake lag raha tha, is liye filter ne rok diya.`
+        : trend === 'side' ? 'Market sideways hai, koi saaf rukh nahi.'
+        : trend === 'up' ? 'Market upar ja rahi hai. BUY ke sahi mauqe ka intezar hai.'
+        : trend === 'down' ? 'Market neeche ja rahi hai. SELL ke sahi mauqe ka intezar hai.' : 'Sahi mauqe ka intezar hai.' });
+      if (rejected) {
         $('signalNote').textContent = `${raw.side} signal bana lekin filter ne reject kar diya (fake ho sakta hai). Trade na lein.`;
         renderChecks(raw.checks);
       } else {
@@ -150,13 +184,6 @@
     $('signalChip').textContent = isNew ? 'NAYA SIGNAL' : active.tp1Hit ? 'TP1 HIT' : 'TRADE CHAL RAHI';
     $('signalNote').textContent = 'Signal: ' + fmtTime(active.time + H) + ' (1H candle close)';
 
-    // late entry / progress warnings
-    let warn = '';
-    if (active.tp1Hit) warn = 'TP1 ho chuka hai. Ab nayi entry na lein. Jinhon ne trade li hai wo SL entry par le aayein.';
-    else if (!isNew && progR > 0.3) warn = `Price entry se ${fmt(progR, 1)}R aage ja chuki hai. Ab entry lene ka faida kam aur risk zyada hai.`;
-    else if (progR < -0.5) warn = `Price SL ki taraf ja rahi hai (${fmt(progR, 1)}R). Nayi entry soch samajh kar lein.`;
-    if (warn) { $('lateWarn').textContent = warn; $('lateWarn').hidden = false; }
-
     const order = PLATFORMS.orderFor(settings.platform, inst, active, {
       balance: settings.balance, riskPct: settings.risk, usdPerPoint: usdPerPoint(price), price,
     });
@@ -174,7 +201,61 @@
     renderChecks(settings.filter ? active.checks : null);
 
     renderOrder(order);
+
+    // Plain-language instructions: can a newcomer still enter this trade right now?
+    let late = '';
+    if (mkt.closed) late = 'Market abhi band hai. Market khulne par app dobara dekhein.';
+    else if (mkt.stale) late = 'Price ka data purana hai, is liye abhi trade na lagayein. Internet check kar ke Refresh dabayein.';
+    else if (active.tp1Hit) late = 'Ye trade pehle hi TP1 tak pohanch chuki hai. Ab entry ka waqt guzar gaya.';
+    else if (progR > (isNew ? 0.5 : 0.3)) late = 'Price entry se kaafi aage nikal chuki hai. Ab entry lena faidemand nahi.';
+    else if (progR < -0.5) late = 'Price Stop Loss ke qareeb ja rahi hai. Is waqt nayi entry na lein.';
+    renderAction({ kind: late ? 'late' : 'enter', why: late, t: active, dir, order, riskUsd });
     maybeNotify(active);
+  }
+
+  // "Aapko kya karna hai": numbered steps in simple words so someone with no experience can place the trade.
+  function renderAction(a) {
+    const box = $('actionBox');
+    box.className = 'action ' + a.kind + (a.dir ? (a.dir > 0 ? ' buy' : ' sell') : '');
+    box.hidden = false;
+    if (a.kind === 'wait') {
+      box.innerHTML = `<div class="act-head">Abhi koi trade na lagayein</div>
+        <p class="act-why">${esc(a.why)}</p>
+        <p class="act-small">Jab BUY ya SELL ka mauqa banega to yahan likha aayega ke kya karna hai, aur phone par alert bhi aayega.</p>`;
+      return;
+    }
+    const t = a.t, side = t.side, plat = PLATFORMS.byId(settings.platform).short;
+    const up = a.dir > 0 ? 'upar' : 'neeche', down = a.dir > 0 ? 'neeche' : 'upar';
+    const slLoss = money(a.riskUsd), tpWin = money(a.riskUsd * GS.CONFIG.TARGET_R), halfWin = money(a.riskUsd * GS.CONFIG.TP1_R / 2);
+    const val = (id, v) => `<b class="act-val" id="${id}">${v}</b><button class="copy" data-copy="${id}" type="button">Copy</button>`;
+    const steps = [
+      `<li><span>Stop Loss lagayein</span>${val('acSL', fmtP(t.sl))}<small>Price yahan aayi to trade khud band ho jayegi. Nuqsan takreeban ${slLoss}.</small></li>`,
+      `<li><span>Take Profit lagayein</span>${val('acTP', fmtP(t.tp2))}<small>Price yahan aayi to trade khud band ho jayegi. Munafa takreeban ${tpWin}.</small></li>`,
+      `<li><span>Jab price ${fmtP(t.tp1)} par aaye</span><small>Aadha lot band kar dein (takreeban ${halfWin} munafa) aur Stop Loss ko entry ${fmtP(t.entry)} par le aayein. Is ke baad baqi trade mein nuqsan nahi hoga.</small></li>`,
+    ];
+    if (a.kind === 'enter') {
+      if (!a.order.available) {
+        box.innerHTML = `<div class="act-head">Is platform par ye trade nahi lag sakti</div><p class="act-why">${esc(a.order.reason)}</p>`;
+        return;
+      }
+      const btn = side === 'BUY' ? 'Buy' : 'Sell', other = side === 'BUY' ? 'Sell' : 'Buy';
+      box.innerHTML = `<div class="act-head">Abhi ${side} karein</div>
+        <ol class="act-steps">
+          <li><span>${esc(plat)} mein ${inst.id} ka <b>${side}</b> order kholein</span>${val('acSize', esc(a.order.sizeText))}<small>${btn} ka button dabana hai, ${other} ka nahi.</small></li>
+          ${steps.join('')}
+        </ol>
+        <p class="act-small">Aapke broker ki price ${fmtP(t.entry)} se alag ho to: Stop Loss apni entry se ${fmtP(t.slDist)} ${down}, aur Take Profit ${fmtP(t.slDist * GS.CONFIG.TARGET_R)} ${up} rakhein.</p>`;
+      return;
+    }
+    // late: no new entry, but tell people already in the trade what to do
+    const held = t.tp1Hit
+      ? `<li><span>Stop Loss ko entry par le aayein</span>${val('acSL', fmtP(t.entry))}<small>TP1 ho chuka hai. Aadha lot band kar dein (agar nahi kiya) aur SL entry par rakhein.</small></li>
+         <li><span>Take Profit rehne dein</span>${val('acTP', fmtP(t.tp2))}</li>`
+      : steps.join('');
+    box.innerHTML = `<div class="act-head">Nayi trade na lagayein</div>
+      <p class="act-why">${esc(a.why)}</p>
+      <p class="act-sub">Agar aap ne ye ${side} trade pehle se li hui hai:</p>
+      <ol class="act-steps">${held}</ol>`;
   }
 
   function renderOrder(order) {
@@ -362,7 +443,7 @@
     $('signalNote').textContent = note || '';
     $('verdictNote').textContent = '';
     $('signalCard').classList.remove('buy', 'sell', 'wait');
-    ['tradeBox', 'mt5Card', 'checks', 'lateWarn', 'priceNote'].forEach(id => ($(id).hidden = true));
+    ['tradeBox', 'mt5Card', 'checks', 'actionBox', 'priceNote'].forEach(id => ($(id).hidden = true));
     $('btBody').innerHTML = '<tr><td colspan="3" class="muted">—</td></tr>';
     $('history').innerHTML = '<li class="muted">—</li>';
     const cv = $('chart'); cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
@@ -409,10 +490,10 @@
     const seq = ++loadSeq, forInst = inst.id;
     $('btnRefresh').classList.add('spin');
     try {
-      const { candles, source } = await loadCandles();
+      const { candles, source, offset } = await loadCandles();
       if (seq !== loadSeq || forInst !== inst.id) return; // market changed meanwhile
-      lastData = { candles, source };
-      render(candles, source);
+      lastData = { candles, source, offset };
+      render(candles, source, offset);
     } catch (e) {
       setStatus('err', 'Error');
       showBanner((e.needKey ? '' : 'Data load nahi hua: ') + e.message, true);
@@ -472,7 +553,7 @@
     $('setBalance').value = settings.balance; $('setRisk').value = settings.risk; $('setContract').value = settings.contract;
     inst = MARKETS.byId(settings.market);
     if (changedMarket) { clearView('Loading…'); lastData = null; }
-    else if (lastData) render(lastData.candles, lastData.source); // platform/risk change shows instantly
+    else if (lastData) render(lastData.candles, lastData.source, lastData.offset); // platform/risk change shows instantly
     applyMarketUI();
     toast('Save ho gaya' + (changedMarket ? ': ab ' + inst.id + ' ke signal' : ''));
     schedule();
@@ -480,6 +561,10 @@
     if (changedMarket) showTab('signal');
   });
 
+  $('actionBox').addEventListener('click', e => {
+    const btn = e.target.closest('.copy[data-copy]');
+    if (btn) copyText($(btn.dataset.copy).textContent);
+  });
   $('orderGrid').addEventListener('click', e => {
     const btn = e.target.closest('.copy[data-copy]');
     if (btn) copyText($(btn.dataset.copy).textContent);
