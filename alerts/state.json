@@ -4,7 +4,8 @@
     "BTCUSD": {
       "announced": 1794279600000,
       "init": true,
-      "lastSignal": 1794279600000
+      "lastSignal": 1794279600000,
+      "tp1": 1794279600000
     },
     "ETHUSD": {
       "announced": 1794063600000,
