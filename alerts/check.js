@@ -75,7 +75,7 @@ async function notify(inst, { title, body, tags, priority }, mode = 'safe') {
   const res = await fetch(`${NTFY}/${topic}`, {
     method: 'POST',
     body,
-    headers: { Title: title, Tags: tags, Priority: String(priority), Click: M.APP_URL },
+    headers: { Title: title, Tags: tags, Priority: String(priority), Click: M.APP_URL, Actions: `view, App kholein, ${M.APP_URL}` },
   });
   if (!res.ok) throw new Error(`ntfy ${res.status} for ${topic}`);
   console.log(`sent -> ${topic}: ${title}`);
@@ -92,7 +92,7 @@ function signalMessage(inst, t, mode = 'safe') {
   const up = buy ? 'upar' : 'neeche', down = buy ? 'neeche' : 'upar';
   return {
     title: `${inst.id}: abhi ${t.side} karein${tag(mode)}`,
-    tags: buy ? 'green_circle,chart_with_upwards_trend' : 'red_circle,chart_with_downwards_trend',
+    tags: buy ? 'rotating_light,green_circle' : 'rotating_light,red_circle', // sent with priority 5 (ntfy max) so it can ring like an alarm
     priority: 5,
     body: [
       `${buy ? 'Buy' : 'Sell'} ka order kholein (price takreeban ${fmt(inst, t.entry)}).`,
@@ -161,7 +161,7 @@ async function main() {
   if (process.env.TEST === '1') {
     for (const inst of M.INSTRUMENTS) for (const mode of MODES) {
       await notify(inst, {
-        title: `Naseem Trader: ${inst.id}${tag(mode)} alerts ON`, tags: 'bell', priority: 3,
+        title: `Naseem Trader: ${inst.id}${tag(mode)} alerts ON`, tags: 'bell,rotating_light', priority: 5, // max priority so the alarm setup can be tested
         body: `Test alert. ${inst.id} ${mode === 'active' ? 'Active' : 'Safe'} mode ke naye signal, TP1, TP2 aur SL ke alerts isi topic par aayenge.`,
       }, mode);
     }
