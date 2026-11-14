@@ -9,12 +9,12 @@
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Naseem Trader</title>
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
   <header class="top">
     <div class="brand">
-      <img src="icons/icon-192.png?v=8" alt="" width="34" height="34">
+      <img src="icons/icon-192.png?v=9" alt="" width="34" height="34">
       <div>
         <h1>Naseem Trader</h1>
         <button class="market-pill" id="marketPill" type="button">XAUUSD · 1H</button>
@@ -118,6 +118,7 @@
         <ul>
           <li><b>BUY:</b> EMA50 &gt; EMA200 aur price EMA200 se upar, EMA9 EMA21 ko neeche se cross kare, RSI 50–70.</li>
           <li><b>SELL:</b> EMA50 &lt; EMA200 aur price EMA200 se neeche, EMA9 EMA21 ko upar se cross kare, RSI 30–50.</li>
+          <li><b>Active mode mein ye bhi:</b> trend chal raha ho, price wapas EMA21 tak aaye aur candle trend ki taraf band ho (pullback entry).</li>
           <li><b>Fake-signal filter:</b> 4H trend same taraf, signal candle mazboot (body &gt; 50%), price EMA21 se 1 ATR ke andar.</li>
           <li>Signal sirf <b>band ho chuki</b> 1H candle par banta hai, baad mein badalta nahi.</li>
           <li><b>SL</b> = 2.5 × ATR. <b>TP1</b> = 1R, <b>TP2</b> = 3R. Trade 72 ghante baad khud band.</li>
@@ -132,6 +133,15 @@
         <div class="label">Market</div>
         <select id="setMarket"></select>
         <p class="fine" id="marketHint"></p>
+      </div>
+
+      <div class="card">
+        <div class="label">Signal mode</div>
+        <select id="setMode">
+          <option value="safe">Safe: kam signal, zyada mazboot (~2 har mahine)</option>
+          <option value="active">Active: zyada signal (~6 har mahine)</option>
+        </select>
+        <p class="fine" id="modeHint"></p>
       </div>
 
       <div class="card">
@@ -170,7 +180,7 @@
         </ol>
         <div class="topic"><code id="topic">—</code><button class="copy" id="copyTopic" type="button">Copy</button></div>
         <a class="link-btn" id="ntfyLink" href="#" target="_blank" rel="noopener">ntfy mein kholein</a>
-        <p class="fine">Har market ka topic alag hai. Jo market upar chuna hai usi ka topic dikhta hai. Cloud har 20 minute baad check karta hai aur naya signal, TP1, TP2 ya SL hone par alert bhejta hai.</p>
+        <p class="fine">Har market aur har mode (Safe / Active) ka topic alag hai. Jo market aur mode upar chuna hai usi ka topic dikhta hai. Cloud har 20 minute baad check karta hai aur naya signal, TP1, TP2 ya SL hone par alert bhejta hai.</p>
       </div>
 
       <div class="card">
@@ -180,7 +190,7 @@
         <p class="fine" id="notifyState"></p>
       </div>
 
-      <p class="version">Naseem Trader v2.4</p>
+      <p class="version">Naseem Trader v2.5</p>
     </section>
   </main>
 
@@ -192,9 +202,9 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="instruments.js?v=8"></script>
-  <script src="indicators.js?v=8"></script>
-  <script src="platforms.js?v=8"></script>
-  <script src="app.js?v=8"></script>
+  <script src="instruments.js?v=9"></script>
+  <script src="indicators.js?v=9"></script>
+  <script src="platforms.js?v=9"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

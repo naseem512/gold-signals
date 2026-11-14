@@ -125,24 +125,46 @@
     ];
   }
 
+  // Signal modes.
+  //  safe:   only the EMA9/21 cross in the trend direction (about 2 signals a month on gold).
+  //  active: cross OR a pullback entry: the trend is already running (EMA9 on the trend side of EMA21),
+  //          price dips back to EMA21 and the candle closes back with the trend, beyond the previous
+  //          candle's body. About 6 a month on gold. Same filters, SL and targets.
+  // Tested on 2.5y PAXG + 2.4y gold futures, $0.50 cost (Nov 2026):
+  //          safe   PF 2.27 / 2.47, max drawdown 4R,  win ~48%
+  //          active PF 1.61 / 1.38, max drawdown 14R, win ~39%, both halves of the data profitable
+  const MODES = {
+    safe: { name: 'Safe', perMonth: 2, pf: '2.3', dd: 4, win: 48 },
+    active: { name: 'Active', perMonth: 6, pf: '1.5', dd: 14, win: 39 },
+  };
+
+  function pullbackAt(ind, candles, i, dir) {
+    const { e9, e21 } = ind, p = candles[i - 1], k = candles[i];
+    if (dir > 0) return e9[i] > e21[i] && Math.min(p.l, k.l) <= e21[i] && k.c > e21[i] && k.c > k.o && k.c > Math.max(p.c, p.o);
+    return e9[i] < e21[i] && Math.max(p.h, k.h) >= e21[i] && k.c < e21[i] && k.c < k.o && k.c < Math.min(p.c, p.o);
+  }
+
   // Signal on the CLOSE of candle i (i must be a closed candle).
-  function signalAt(ind, candles, i) {
+  function signalAt(ind, candles, i, mode = 'safe') {
     if (i < 1) return null;
     const { e9, e21, rsi: r, atr: a } = ind;
     if ([e9[i - 1], e21[i - 1], e9[i], e21[i], r[i], a[i]].some(v => v == null)) return null;
     const trend = trendAt(ind, candles, i);
     const crossUp = e9[i - 1] <= e21[i - 1] && e9[i] > e21[i];
     const crossDn = e9[i - 1] >= e21[i - 1] && e9[i] < e21[i];
-    let side = null;
-    if (trend === 'up' && crossUp && r[i] > CONFIG.RSI_BUY[0] && r[i] < CONFIG.RSI_BUY[1]) side = 'BUY';
-    if (trend === 'down' && crossDn && r[i] < CONFIG.RSI_SELL[1] && r[i] > CONFIG.RSI_SELL[0]) side = 'SELL';
+    const active = mode === 'active';
+    const up = crossUp || (active && trend === 'up' && pullbackAt(ind, candles, i, 1));
+    const dn = crossDn || (active && trend === 'down' && pullbackAt(ind, candles, i, -1));
+    let side = null, kind = null;
+    if (trend === 'up' && up && r[i] > CONFIG.RSI_BUY[0] && r[i] < CONFIG.RSI_BUY[1]) { side = 'BUY'; kind = crossUp ? 'cross' : 'pullback'; }
+    if (trend === 'down' && dn && r[i] < CONFIG.RSI_SELL[1] && r[i] > CONFIG.RSI_SELL[0]) { side = 'SELL'; kind = crossDn ? 'cross' : 'pullback'; }
     if (!side) return null;
     const entry = candles[i].c;
     const dist = a[i] * CONFIG.SL_ATR;
     const dir = side === 'BUY' ? 1 : -1;
     const checks = filterChecks(ind, candles, i, side);
     return {
-      index: i, time: candles[i].t, side, entry, atr: a[i],
+      index: i, time: candles[i].t, side, kind, entry, atr: a[i],
       sl: entry - dir * dist,
       tp1: entry + dir * dist * CONFIG.TP1_R,
       tp2: entry + dir * dist * CONFIG.TARGET_R,
@@ -174,11 +196,11 @@
   }
 
   // cost = spread + slippage per trade in price units (differs per market).
-  function backtest(candles, ind, lastClosed, useFilters = true, cost = CONFIG.COST_USD) {
+  function backtest(candles, ind, lastClosed, useFilters = true, cost = CONFIG.COST_USD, mode = 'safe') {
     const trades = [], rejected = [];
     let i = 1;
     while (i <= lastClosed) {
-      const sig = signalAt(ind, candles, i);
+      const sig = signalAt(ind, candles, i, mode);
       if (sig && useFilters && !sig.passed) { rejected.push(sig); i++; continue; }
       if (sig) {
         const res = resolve(sig, candles, lastClosed);
@@ -224,8 +246,8 @@
   }
 
   const api = {
-    CONFIG, HOUR, isMarketClosed, marketCandles, ema, rsi, atr, htfTrend, computeAll, trendAt,
-    filterChecks, signalAt, resolve, backtest, lotSize, shiftCandles,
+    CONFIG, MODES, HOUR, isMarketClosed, marketCandles, ema, rsi, atr, htfTrend, computeAll, trendAt,
+    filterChecks, pullbackAt, signalAt, resolve, backtest, lotSize, shiftCandles,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GS = api;

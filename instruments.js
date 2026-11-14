@@ -28,7 +28,8 @@
   const APP_URL = 'https://naseem512.github.io/gold-signals/';
   // ntfy topic per market: <NTFY_BASE>-<id lowercase>. The random part keeps strangers from guessing it.
   const NTFY_BASE = 'naseem-trader-8cb48b4cb5';
-  const topicFor = id => NTFY_BASE + '-' + id.toLowerCase();
+  // Safe keeps the original topic (existing subscribers keep working); Active gets its own.
+  const topicFor = (id, mode = 'safe') => NTFY_BASE + '-' + id.toLowerCase() + (mode === 'active' ? '-active' : '');
   const byId = id => INSTRUMENTS.find(m => m.id === id) || INSTRUMENTS[0];
 
   // PAXG (Binance) trades a few dollars away from spot gold, which is what MT5 brokers quote.

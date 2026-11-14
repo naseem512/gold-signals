@@ -10,6 +10,19 @@ An installable web app (PWA) that gives 1H BUY/SELL signals with SL/TP, lot size
 - **Risk:** SL = 2.5 × ATR(14), TP1 = 1R, TP2 = 3R, and the trade closes after 72 hours.
 - Weekend candles are removed for markets that close on the weekend.
 
+## Signal modes (Settings → Signal mode)
+- **Safe** (default): only the EMA9/21 cross. About 2 signals a month on gold. Many weeks have none: 16 of the last 26 weeks had no signal.
+- **Active**: the cross, plus a pullback entry. The trend must already be running (EMA9 on the trend side of EMA21), price dips back to EMA21, and the candle closes back with the trend beyond the previous candle's body. About 6 signals a month; 5 of the last 26 weeks had no signal. The filters, SL and targets are the same as Safe.
+
+| Gold, 2.5y PAXG / 2.4y GC=F, $0.50 cost | Trades/month | Win | Profit factor | Max drawdown |
+|---|---|---|---|---|
+| Safe | 2.3 / 1.6 | 46% / 50% | 2.27 / 2.47 | 4.1R / 4.1R |
+| Active | 5.8 / 5.1 | 40% / 38% | 1.61 / 1.38 | 13.8R / 8.2R |
+
+Active was profitable in both halves of both datasets, at $1 cost, and at every SL (2–3 ATR) and target (2.5–4R) tested. It is clearly weaker than Safe per trade.
+
+Each mode has its own ntfy topic: Safe keeps `…-xauusd` and Active uses `…-xauusd-active`. A signal the cloud job finds late is announced only while it is still worth entering: TP1 not hit, price within -0.5R to +0.3R of entry, and at most 12 hours old.
+
 ## Testing (gold, 2024–2026, filter on, $0.50 cost per trade)
 | Data | Trades | Win | Profit factor | Max drawdown |
 |---|---|---|---|---|

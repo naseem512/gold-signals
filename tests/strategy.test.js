@@ -268,3 +268,77 @@ test('spot offset: fresh quote accepted, stale/implausible/broken replies reject
   assert.equal(M.spotOffset(null, 4117.5, now), null);
   assert.equal(M.spotOffset({}, 4117.5, now), null);
 });
+
+// ---------- signal modes ----------
+test('Active mode keeps every Safe signal and adds pullback entries', () => {
+  const m = GS.marketCandles(fixture), ind = GS.computeAll(m);
+  let safe = 0, extra = 0;
+  for (let i = 1; i < m.length - 1; i++) {
+    const s = GS.signalAt(ind, m, i, 'safe'), a = GS.signalAt(ind, m, i, 'active');
+    if (s) { safe++; assert.ok(a && a.side === s.side && a.kind === 'cross', 'active lost a safe signal at ' + i); }
+    if (a && !s) { extra++; assert.equal(a.kind, 'pullback'); }
+  }
+  assert.ok(safe > 0 && extra > safe, `safe ${safe}, extra ${extra}`);
+  const bs = GS.backtest(m, ind, m.length - 2, true, 0.5, 'safe'), ba = GS.backtest(m, ind, m.length - 2, true, 0.5, 'active');
+  assert.ok(ba.trades.length > bs.trades.length);
+});
+
+test('Active pullback signals do not repaint', () => {
+  const m = GS.marketCandles(fixture);
+  const full = GS.computeAll(m);
+  for (let i = 1500; i < m.length; i += 7) {
+    const part = m.slice(0, i + 1);
+    const live = GS.signalAt(GS.computeAll(part), part, i, 'active');
+    const later = GS.signalAt(full, m, i, 'active');
+    assert.deepEqual(live && [live.side, live.kind, live.entry], later && [later.side, later.kind, later.entry], 'at ' + i);
+  }
+});
+
+test('alert job (Active): replay gives signal -> result in order and matches the backtest', async () => {
+  const { checkMarket } = require('../alerts/check.js');
+  const inst = M.byId('XAUUSD');
+  const m = GS.marketCandles(fixture);
+  const st = {}, log = [];
+  for (let i = 1200; i < m.length; i++) {
+    const now = m[i].t + H + 10 * 60 * 1000;
+    const { events } = await checkMarket(inst, st, now, m.slice(0, i + 1), 'active');
+    for (const e of events) log.push({ i, title: e.title });
+  }
+  assert.ok(log.every(e => e.title.endsWith('(Active)')));
+  let open = false;
+  for (const e of log) {
+    if (/abhi (BUY|SELL) karein/.test(e.title)) { assert.equal(open, false, 'overlap at ' + e.i); open = true; }
+    else if (!/TP1 hit/.test(e.title)) { assert.ok(open, 'result without signal at ' + e.i); open = false; }
+  }
+  const bt = GS.backtest(m, GS.computeAll(m), m.length - 1, true, inst.cost, 'active');
+  assert.equal(log.filter(e => /abhi (BUY|SELL) karein/.test(e.title)).length, bt.trades.filter(t => t.index >= 1201).length);
+});
+
+test('alert job skips a signal found too late (price already ran away), but tracks it', async () => {
+  const { checkMarket } = require('../alerts/check.js');
+  const inst = M.byId('XAUUSD');
+  const m = GS.marketCandles(fixture), ind = GS.computeAll(m);
+  const bt = GS.backtest(m, ind, m.length - 2, true, inst.cost, 'active');
+  let found = null;
+  for (const t of bt.trades.filter(x => x.index >= 400)) { // checkMarket needs 300+ candles of history
+    const dir = t.side === 'BUY' ? 1 : -1;
+    for (let j = t.index + 1; j < (t.exitIndex ?? m.length - 2); j++) {
+      const r = GS.resolve(t, m, j);
+      if (r.result !== 'open' || r.tp1Hit) break;
+      if ((m[j].c - t.entry) * dir / t.slDist > 0.4) { found = { t, j }; break; }
+    }
+    if (found) break;
+  }
+  assert.ok(found, 'fixture should contain a trade that ran >0.4R before TP1');
+  const st = { init: true, lastSignal: 0 };
+  const { events } = await checkMarket(inst, st, m[found.j].t + H + 60000, m.slice(0, found.j + 1), 'active');
+  assert.equal(events.length, 0);
+  assert.equal(st.lastSignal, found.t.time);
+  assert.equal(st.announced, undefined);
+});
+
+test('ntfy topics: Safe keeps the original topic, Active has its own', () => {
+  assert.equal(M.topicFor('XAUUSD'), 'naseem-trader-8cb48b4cb5-xauusd');
+  assert.equal(M.topicFor('XAUUSD', 'safe'), 'naseem-trader-8cb48b4cb5-xauusd');
+  assert.equal(M.topicFor('XAUUSD', 'active'), 'naseem-trader-8cb48b4cb5-xauusd-active');
+});

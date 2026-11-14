@@ -12,6 +12,7 @@
   const settings = {
     market: store.get('nt_market', 'XAUUSD'),
     platform: store.get('nt_platform', 'mt5'),
+    mode: store.get('nt_mode', 'safe') === 'active' ? 'active' : 'safe',
     balance: parseFloat(store.get('nt_balance', store.get('gs_balance', '1000'))) || 1000,
     risk: parseFloat(store.get('nt_risk', store.get('gs_risk', '1'))) || 1,
     contract: store.get('nt_contract', ''),
@@ -101,8 +102,8 @@
     const last = candles.length - 1;
     const lastClosed = candles[last].t + H > now ? last - 1 : last;
     const ind = GS.computeAll(candles);
-    const btF = GS.backtest(candles, ind, lastClosed, true, inst.cost);
-    const btN = GS.backtest(candles, ind, lastClosed, false, inst.cost);
+    const btF = GS.backtest(candles, ind, lastClosed, true, inst.cost, settings.mode);
+    const btN = GS.backtest(candles, ind, lastClosed, false, inst.cost, settings.mode);
     const bt = settings.filter ? btF : btN;
     const price = candles[last].c;
     lastView = { candles, ind, bt, lastClosed };
@@ -157,7 +158,7 @@
       $('signalChip').textContent = 'Koi trade nahi';
       $('tradeBox').hidden = true;
       $('mt5Card').hidden = true;
-      const raw = GS.signalAt(ind, candles, lastClosed);
+      const raw = GS.signalAt(ind, candles, lastClosed, settings.mode);
       const rejected = raw && settings.filter && !raw.passed;
       renderAction({ kind: 'wait', why: mkt.closed ? 'Market abhi band hai (weekend).'
         : rejected ? `${raw.side} ka signal bana tha lekin wo fake lag raha tha, is liye filter ne rok diya.`
@@ -182,7 +183,7 @@
     card.classList.add(active.side.toLowerCase());
     $('signalText').textContent = active.side;
     $('signalChip').textContent = isNew ? 'NAYA SIGNAL' : active.tp1Hit ? 'TP1 HIT' : 'TRADE CHAL RAHI';
-    $('signalNote').textContent = 'Signal: ' + fmtTime(active.time + H) + ' (1H candle close)';
+    $('signalNote').textContent = 'Signal: ' + fmtTime(active.time + H) + ' (1H candle close)' + (active.kind === 'pullback' ? ' · Pullback entry' : '');
 
     const order = PLATFORMS.orderFor(settings.platform, inst, active, {
       balance: settings.balance, riskPct: settings.risk, usdPerPoint: usdPerPoint(price), price,
@@ -285,10 +286,17 @@
 
   function renderReport(candles, btF, btN, lastClosed) {
     const v = inst.tested;
+    const md = GS.MODES[settings.mode];
     $('verdictCard').className = 'card verdict ' + v;
-    $('verdictText').textContent = { strong: 'Mazboot ✓', weak: 'Kamzor ⚠', loss: 'Ghaata ✗' }[v] + ' · ' + inst.id;
+    // Active on gold is profitable in tests but clearly weaker than Safe, so it is not called "Mazboot".
+    const label = settings.mode === 'active' && v === 'strong' ? 'Theek ✓' : { strong: 'Mazboot ✓', weak: 'Kamzor ⚠', loss: 'Ghaata ✗' }[v];
+    $('verdictText').textContent = label + ' · ' + inst.id + ' · ' + md.name;
     const pfTxt = btF.profitFactor == null ? '—' : btF.profitFactor === Infinity ? '∞' : fmt(btF.profitFactor);
-    $('verdictNote').textContent = MARKETS.TEST_NOTE[v] + ` Pichle ${Math.round((candles[lastClosed].t - candles[0].t) / (24 * H))} din: profit factor ${pfTxt}.`;
+    const modeNote = settings.mode === 'active'
+      ? (inst.id === 'XAUUSD' ? ' Active mode: 2.5 saal mein har mahine ~6 signal, profit factor ~1.5, lekin Safe se zyada loss wali trades.'
+        : ' Active mode sirf Gold par test hua hai.')
+      : '';
+    $('verdictNote').textContent = MARKETS.TEST_NOTE[v] + modeNote + ` Pichle ${Math.round((candles[lastClosed].t - candles[0].t) / (24 * H))} din: profit factor ${pfTxt}.`;
 
     $('bPeriod').textContent = Math.round((candles[lastClosed].t - candles[0].t) / (24 * H)) + ' din';
     const days = (candles[lastClosed].t - candles[0].t) / (24 * H);
@@ -406,7 +414,7 @@
   }
 
   async function maybeNotify(sig) {
-    const key = 'nt_alert_' + inst.id, id = sig.time + sig.side;
+    const key = 'nt_alert_' + inst.id + (settings.mode === 'active' ? '_active' : ''), id = sig.time + sig.side;
     const prev = store.get(key, null);
     if (prev === String(id)) return;
     store.set(key, id);
@@ -473,8 +481,8 @@
   }
 
   function applyMarketUI() {
-    $('marketPill').textContent = inst.id + ' · 1H · ' + PLATFORMS.byId(settings.platform).short;
-    const topic = MARKETS.topicFor(inst.id);
+    $('marketPill').textContent = inst.id + ' · ' + GS.MODES[settings.mode].name + ' · ' + PLATFORMS.byId(settings.platform).short;
+    const topic = MARKETS.topicFor(inst.id, settings.mode);
     $('topic').textContent = topic;
     $('ntfyLink').href = 'https://ntfy.sh/' + topic;
     $('setContract').placeholder = 'Default: ' + inst.contract;
@@ -515,6 +523,15 @@
   $('setMarket').innerHTML = MARKETS.INSTRUMENTS.map(m =>
     `<option value="${m.id}">${m.name} (${m.id})${m.tested === 'strong' ? ' ✓ Mazboot' : m.tested === 'loss' ? ' ✗ Ghaata' : ' ⚠ Kamzor'}</option>`).join('');
   $('setMarket').value = inst.id;
+  $('setMode').value = settings.mode;
+  const modeHint = () => {
+    const m = GS.MODES[$('setMode').value];
+    $('modeHint').textContent = $('setMode').value === 'active'
+      ? `Har mahine takreeban ${m.perMonth} signal (Gold). Zyada mauqe milte hain lekin loss wali trades bhi zyada hoti hain (win ~${m.win}%). Risk 1% ya kam rakhein. Mobile alert ke liye naya topic subscribe karein (neeche).`
+      : `Har mahine takreeban ${m.perMonth} signal (Gold). Kam lekin zyada mazboot signal (win ~${m.win}%). Kai hafte signal na aana normal hai.`;
+  };
+  modeHint();
+  $('setMode').addEventListener('change', modeHint);
   $('setPlatform').innerHTML = PLATFORMS.PLATFORMS.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
   $('setPlatform').value = PLATFORMS.byId(settings.platform).id;
   const platformHint = () => {
@@ -543,19 +560,21 @@
     const changedMarket = settings.market !== $('setMarket').value;
     settings.market = $('setMarket').value;
     settings.platform = $('setPlatform').value;
+    const changedMode = settings.mode !== $('setMode').value;
+    settings.mode = $('setMode').value === 'active' ? 'active' : 'safe';
     settings.balance = b > 0 ? b : 1000;
     settings.risk = r > 0 && r <= 5 ? r : 1;
     settings.contract = parseFloat(c) > 0 ? c : '';
     settings.key = $('setKey').value.trim();
     settings.filter = $('setFilter').checked;
     store.set('nt_market', settings.market); store.set('nt_balance', settings.balance); store.set('nt_risk', settings.risk);
-    store.set('nt_contract', settings.contract); store.set('nt_key', settings.key); store.set('nt_filter', settings.filter ? '1' : '0'); store.set('nt_platform', settings.platform);
+    store.set('nt_contract', settings.contract); store.set('nt_key', settings.key); store.set('nt_filter', settings.filter ? '1' : '0'); store.set('nt_platform', settings.platform); store.set('nt_mode', settings.mode);
     $('setBalance').value = settings.balance; $('setRisk').value = settings.risk; $('setContract').value = settings.contract;
     inst = MARKETS.byId(settings.market);
     if (changedMarket) { clearView('Loading…'); lastData = null; }
     else if (lastData) render(lastData.candles, lastData.source, lastData.offset); // platform/risk change shows instantly
     applyMarketUI();
-    toast('Save ho gaya' + (changedMarket ? ': ab ' + inst.id + ' ke signal' : ''));
+    toast('Save ho gaya' + (changedMarket ? ': ab ' + inst.id + ' ke signal' : changedMode ? ': ' + GS.MODES[settings.mode].name + ' mode' : ''));
     schedule();
     refresh();
     if (changedMarket) showTab('signal');

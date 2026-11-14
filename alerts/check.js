@@ -69,8 +69,8 @@ async function candlesFor(inst) {
   return inst.closesWeekend ? GS.marketCandles(c) : c;
 }
 
-async function notify(inst, { title, body, tags, priority }) {
-  const topic = M.topicFor(inst.id);
+async function notify(inst, { title, body, tags, priority }, mode = 'safe') {
+  const topic = M.topicFor(inst.id, mode);
   if (DRY) { console.log(`[DRY] -> ${topic}\n  ${title}\n  ${body.replace(/\n/g, '\n  ')}`); return; }
   const res = await fetch(`${NTFY}/${topic}`, {
     method: 'POST',
@@ -82,13 +82,16 @@ async function notify(inst, { title, body, tags, priority }) {
 }
 
 function fmt(inst, n) { return Number(n).toFixed(inst.digits); }
+const tag = mode => (mode === 'active' ? ' (Active)' : '');
+const MODES = ['safe', 'active'];
+const stateKey = (inst, mode) => (mode === 'active' ? inst.id + '-active' : inst.id);
 
 // Written for someone with no trading experience: what to press, where SL and TP go, what to do at TP1.
-function signalMessage(inst, t) {
+function signalMessage(inst, t, mode = 'safe') {
   const buy = t.side === 'BUY';
   const up = buy ? 'upar' : 'neeche', down = buy ? 'neeche' : 'upar';
   return {
-    title: `${inst.id}: abhi ${t.side} karein`,
+    title: `${inst.id}: abhi ${t.side} karein${tag(mode)}`,
     tags: buy ? 'green_circle,chart_with_upwards_trend' : 'red_circle,chart_with_downwards_trend',
     priority: 5,
     body: [
@@ -102,14 +105,14 @@ function signalMessage(inst, t) {
   };
 }
 
-async function checkMarket(inst, st, now, candlesOverride) {
+async function checkMarket(inst, st, now, candlesOverride, mode = 'safe') {
   const candles = candlesOverride || await candlesFor(inst);
   if (!candles) return { skipped: 'no TwelveData key' };
   if (candles.length < 300) throw new Error('too few candles: ' + candles.length);
   const last = candles.length - 1;
   const lastClosed = candles[last].t + H > now ? last - 1 : last;
   const ind = GS.computeAll(candles);
-  const bt = GS.backtest(candles, ind, lastClosed, true, inst.cost);
+  const bt = GS.backtest(candles, ind, lastClosed, true, inst.cost, mode);
   const t = bt.trades[bt.trades.length - 1];
   const events = [];
   const first = !st.init;
@@ -123,15 +126,20 @@ async function checkMarket(inst, st, now, candlesOverride) {
 
   if (t.time > (st.lastSignal || 0)) {
     st.lastSignal = t.time;
+    // GitHub can start this job hours late. Announce only while the trade is still worth entering,
+    // using the same rule as the app's "Abhi BUY/SELL karein" box.
     const ageH = (now - (t.time + H)) / H;
-    if (t.result === 'open' && ageH <= 6) { events.push(signalMessage(inst, t)); st.announced = t.time; }
+    const prog = (candles[last].c - t.entry) * (t.side === 'BUY' ? 1 : -1) / t.slDist;
+    if (t.result === 'open' && !t.tp1Hit && ageH <= 12 && prog <= 0.3 && prog >= -0.5) {
+      events.push(signalMessage(inst, t, mode)); st.announced = t.time;
+    }
   }
   // Follow-up alerts only for trades whose signal alert was actually sent.
   if (st.announced !== t.time) return { events, first };
   if (t.tp1Hit && st.tp1 !== t.time && t.result === 'open') {
     st.tp1 = t.time;
     events.push({
-      title: `${inst.id} TP1 hit`, tags: 'dart', priority: 4,
+      title: `${inst.id} TP1 hit${tag(mode)}`, tags: 'dart', priority: 4,
       body: `${t.side} @ ${fmt(inst, t.entry)}: TP1 ${fmt(inst, t.tp1)} aa gaya.\nAadha lot band karein aur SL entry (${fmt(inst, t.entry)}) par le aayein.`,
     });
   }
@@ -140,7 +148,7 @@ async function checkMarket(inst, st, now, candlesOverride) {
     if (t.tp1Hit) st.tp1 = t.time;
     const label = { tp: 'TP2 hit', sl: 'SL hit', time: '72 ghante poore, trade band' }[t.exit];
     events.push({
-      title: `${inst.id} ${label}`, tags: t.exit === 'tp' ? 'white_check_mark,moneybag' : t.exit === 'sl' ? 'x' : 'hourglass', priority: 4,
+      title: `${inst.id} ${label}${tag(mode)}`, tags: t.exit === 'tp' ? 'white_check_mark,moneybag' : t.exit === 'sl' ? 'x' : 'hourglass', priority: 4,
       body: `${t.side} @ ${fmt(inst, t.entry)} ka nateeja: ${t.r >= 0 ? '+' : ''}${t.r.toFixed(2)}R` +
         (t.exit === 'sl' && t.tp1Hit ? '\nTP1 pehle ho chuka tha: agar SL entry par kiya tha to ye trade barabar par band hui.' : ''),
     });
@@ -151,11 +159,11 @@ async function checkMarket(inst, st, now, candlesOverride) {
 async function main() {
   const now = Date.now();
   if (process.env.TEST === '1') {
-    for (const inst of M.INSTRUMENTS) {
+    for (const inst of M.INSTRUMENTS) for (const mode of MODES) {
       await notify(inst, {
-        title: `Naseem Trader: ${inst.id} alerts ON`, tags: 'bell', priority: 3,
-        body: `Test alert. ${inst.id} ke naye signal, TP1, TP2 aur SL ke alerts isi topic par aayenge.`,
-      });
+        title: `Naseem Trader: ${inst.id}${tag(mode)} alerts ON`, tags: 'bell', priority: 3,
+        body: `Test alert. ${inst.id} ${mode === 'active' ? 'Active' : 'Safe'} mode ke naye signal, TP1, TP2 aur SL ke alerts isi topic par aayenge.`,
+      }, mode);
     }
     return;
   }
@@ -164,11 +172,15 @@ async function main() {
   state.markets = state.markets || {};
   let failures = 0;
   for (const inst of M.INSTRUMENTS) {
-    const st = state.markets[inst.id] = state.markets[inst.id] || {};
     try {
-      const { events = [], skipped, first } = await checkMarket(inst, st, now);
-      console.log(`${inst.id}: ${skipped ? 'skipped (' + skipped + ')' : (first ? 'initialised' : events.length + ' event(s)')}`);
-      for (const ev of events) await notify(inst, ev);
+      const candles = await candlesFor(inst); // fetched once, used by both modes
+      for (const mode of MODES) {
+        const key = stateKey(inst, mode);
+        const st = state.markets[key] = state.markets[key] || {};
+        const { events = [], skipped, first } = candles ? await checkMarket(inst, st, now, candles, mode) : { skipped: 'no TwelveData key' };
+        console.log(`${key}: ${skipped ? 'skipped (' + skipped + ')' : (first ? 'initialised' : events.length + ' event(s)')}`);
+        for (const ev of events) await notify(inst, ev, mode);
+      }
     } catch (e) {
       failures++;
       console.error(`${inst.id}: ERROR ${e.message}`);
