@@ -8,6 +8,10 @@
       "lastSignal": 1794279600000,
       "tp1": 1794279600000
     },
+    "BTCUSD-active": {
+      "init": true,
+      "lastSignal": 1794243600000
+    },
     "ETHUSD": {
       "announced": 1794063600000,
       "closed": 1794063600000,
@@ -15,13 +19,25 @@
       "lastSignal": 1794063600000,
       "tp1": 1794063600000
     },
+    "ETHUSD-active": {
+      "init": true,
+      "lastSignal": 1794578400000
+    },
     "EURUSD": {},
+    "EURUSD-active": {},
     "GBPUSD": {},
+    "GBPUSD-active": {},
     "USDJPY": {},
+    "USDJPY-active": {},
     "XAGUSD": {},
+    "XAGUSD-active": {},
     "XAUUSD": {
       "init": true,
       "lastSignal": 1793732400000
+    },
+    "XAUUSD-active": {
+      "init": true,
+      "lastSignal": 1794542400000
     }
   }
 }
