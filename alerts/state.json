@@ -34,6 +34,7 @@
     "XAGUSD-active": {},
     "XAUUSD": {
       "announced": 1794909600000,
+      "closed": 1794909600000,
       "init": true,
       "lastSignal": 1794909600000
     },
