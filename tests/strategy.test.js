@@ -173,14 +173,14 @@ test('alert job: replaying history gives signal -> (TP1) -> result, in order, ne
   // every result/TP1 must follow its own signal, and each signal produces at most one TP1 and one result
   let open = false, tp1 = false;
   for (const e of log) {
-    if (/: abhi (BUY|SELL) karein$/.test(e.title)) { assert.equal(open, false, 'new signal while previous still open at ' + e.i); open = true; tp1 = false; }
-    else if (/TP1 hit$/.test(e.title)) { assert.ok(open && !tp1, 'TP1 without open signal at ' + e.i); tp1 = true; }
+    if (/: abhi (BUY|SELL) karein \(Safe\)$/.test(e.title)) { assert.equal(open, false, 'new signal while previous still open at ' + e.i); open = true; tp1 = false; }
+    else if (/TP1 hit \(Safe\)$/.test(e.title)) { assert.ok(open && !tp1, 'TP1 without open signal at ' + e.i); tp1 = true; }
     else { assert.ok(open, 'result without signal at ' + e.i); open = false; }
   }
   // the alerts must match the app's own backtest over the same window
   const bt = GS.backtest(m, GS.computeAll(m), m.length - 1, true, inst.cost);
   const signalsInWindow = bt.trades.filter(t => t.index >= 1201).length;
-  assert.equal(log.filter(e => /: abhi (BUY|SELL) karein$/.test(e.title)).length, signalsInWindow);
+  assert.equal(log.filter(e => /: abhi (BUY|SELL) karein \(Safe\)$/.test(e.title)).length, signalsInWindow);
 });
 
 // ---------- trading platforms ----------
@@ -304,7 +304,7 @@ test('alert job (Active): replay gives signal -> result in order and matches the
     const { events } = await checkMarket(inst, st, now, m.slice(0, i + 1), 'active');
     for (const e of events) log.push({ i, title: e.title });
   }
-  assert.ok(log.every(e => e.title.endsWith('(Active)')));
+  assert.ok(log.length > 0 && log.every(e => !e.title.includes('(Safe)'))); // Active is the main topic: no tag
   let open = false;
   for (const e of log) {
     if (/abhi (BUY|SELL) karein/.test(e.title)) { assert.equal(open, false, 'overlap at ' + e.i); open = true; }
@@ -337,8 +337,8 @@ test('alert job skips a signal found too late (price already ran away), but trac
   assert.equal(st.announced, undefined);
 });
 
-test('ntfy topics: Safe keeps the original topic, Active has its own', () => {
+test('ntfy topics: Active (default) uses the main topic, Safe has its own', () => {
   assert.equal(M.topicFor('XAUUSD'), 'naseem-trader-8cb48b4cb5-xauusd');
-  assert.equal(M.topicFor('XAUUSD', 'safe'), 'naseem-trader-8cb48b4cb5-xauusd');
-  assert.equal(M.topicFor('XAUUSD', 'active'), 'naseem-trader-8cb48b4cb5-xauusd-active');
+  assert.equal(M.topicFor('XAUUSD', 'active'), 'naseem-trader-8cb48b4cb5-xauusd');
+  assert.equal(M.topicFor('XAUUSD', 'safe'), 'naseem-trader-8cb48b4cb5-xauusd-safe');
 });

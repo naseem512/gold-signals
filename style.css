@@ -221,3 +221,7 @@ label.check input { width: 20px; height: 20px; margin: 0; flex: none; }
 .act-steps .act-val { display: block; font-size: 20px; font-variant-numeric: tabular-nums; margin-top: 2px; }
 .act-steps small { display: block; font-size: 12px; color: var(--muted); margin-top: 3px; }
 .act-steps .copy { position: absolute; top: 9px; right: 9px; }
+
+.action.plan.buy { border-color: rgba(32,197,107,.35); } .action.plan.sell { border-color: rgba(240,71,90,.35); }
+.action.plan .act-head { color: var(--gold); }
+.action.plan .act-head::before { content: '🎯'; }

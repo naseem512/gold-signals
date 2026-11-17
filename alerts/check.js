@@ -69,7 +69,7 @@ async function candlesFor(inst) {
   return inst.closesWeekend ? GS.marketCandles(c) : c;
 }
 
-async function notify(inst, { title, body, tags, priority }, mode = 'safe') {
+async function notify(inst, { title, body, tags, priority }, mode = 'active') {
   const topic = M.topicFor(inst.id, mode);
   if (DRY) { console.log(`[DRY] -> ${topic}\n  ${title}\n  ${body.replace(/\n/g, '\n  ')}`); return; }
   const res = await fetch(`${NTFY}/${topic}`, {
@@ -82,8 +82,8 @@ async function notify(inst, { title, body, tags, priority }, mode = 'safe') {
 }
 
 function fmt(inst, n) { return Number(n).toFixed(inst.digits); }
-const tag = mode => (mode === 'active' ? ' (Active)' : '');
-const MODES = ['safe', 'active'];
+const tag = mode => (mode === 'safe' ? ' (Safe)' : '');
+const MODES = ['active', 'safe'];
 const stateKey = (inst, mode) => (mode === 'active' ? inst.id + '-active' : inst.id);
 
 // Written for someone with no trading experience: what to press, where SL and TP go, what to do at TP1.

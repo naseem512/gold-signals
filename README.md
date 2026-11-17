@@ -11,8 +11,8 @@ An installable web app (PWA) that gives 1H BUY/SELL signals with SL/TP, lot size
 - Weekend candles are removed for markets that close on the weekend.
 
 ## Signal modes (Settings → Signal mode)
-- **Safe** (default): only the EMA9/21 cross. About 2 signals a month on gold. Many weeks have none: 16 of the last 26 weeks had no signal.
-- **Active**: the cross, plus a pullback entry. The trend must already be running (EMA9 on the trend side of EMA21), price dips back to EMA21, and the candle closes back with the trend beyond the previous candle's body. About 6 signals a month; 5 of the last 26 weeks had no signal. The filters, SL and targets are the same as Safe.
+- **Safe**: only the EMA9/21 cross. About 2 signals a month on gold. Many weeks have none: 16 of the last 26 weeks had no signal.
+- **Active** (default since v2.6): the cross, plus a pullback entry. The trend must already be running (EMA9 on the trend side of EMA21), price dips back to EMA21, and the candle closes back with the trend beyond the previous candle's body. About 6 signals a month; 5 of the last 26 weeks had no signal. The filters, SL and targets are the same as Safe.
 
 | Gold, 2.5y PAXG / 2.4y GC=F, $0.50 cost | Trades/month | Win | Profit factor | Max drawdown |
 |---|---|---|---|---|
@@ -21,7 +21,7 @@ An installable web app (PWA) that gives 1H BUY/SELL signals with SL/TP, lot size
 
 Active was profitable in both halves of both datasets, at $1 cost, and at every SL (2–3 ATR) and target (2.5–4R) tested. It is clearly weaker than Safe per trade.
 
-Each mode has its own ntfy topic: Safe keeps `…-xauusd` and Active uses `…-xauusd-active`. A signal the cloud job finds late is announced only while it is still worth entering: TP1 not hit, price within -0.5R to +0.3R of entry, and at most 12 hours old.
+Active alerts go to the main topic `…-xauusd`; Safe alerts go to `…-xauusd-safe`. A signal the cloud job finds late is announced only while it is still worth entering: TP1 not hit, price within -0.5R to +0.3R of entry, and at most 12 hours old.
 
 ## Testing (gold, 2024–2026, filter on, $0.50 cost per trade)
 | Data | Trades | Win | Profit factor | Max drawdown |
@@ -41,6 +41,9 @@ Binance is also the default **price source** for gold (PAXG). This is only the p
 
 ## Spot gold calibration
 PAXG trades a few dollars away from spot gold (about $11 below spot in Nov 2026), and MT5 brokers quote spot. On each refresh the app and the alert job read a free spot quote (`api.gold-api.com/price/XAU`, no key) and shift the PAXG candles by the gap. Signals do not change, because EMA crosses, RSI, ATR and the filters are unaffected by a constant shift (a test checks this); only the price levels move onto spot. A quote that is stale (over 20 minutes old, e.g. at the weekend) or more than 3% away is ignored. The app then uses the last good gap for up to 3 days, or else shows the raw PAXG price with a warning. Binance platforms always see raw PAXG.
+
+## Market plan (no open signal)
+Instead of a bare WAIT, the card states the trend. When the 1H and 4H trends agree, it shows the entry zone (EMA21), how far price is from it, and asks the user to set an MT5 price alert there. A "pending limit at EMA21" strategy was tested as an alternative. With one pending order at a time it was weaker (PF about 1.3 on both datasets), so it is not used.
 
 ## Signal card for beginners
 "Aapko kya karna hai" gives numbered steps: the side and size to open, the Stop Loss, the Take Profit, and what to do at TP1. When entry is no longer sensible (TP1 already hit, price moved more than 0.3R, price near SL, market closed or data stale), it says "Nayi trade na lagayein" and shows what to do only for people already in the trade.

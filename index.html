@@ -9,12 +9,12 @@
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Naseem Trader</title>
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
   <header class="top">
     <div class="brand">
-      <img src="icons/icon-192.png?v=9" alt="" width="34" height="34">
+      <img src="icons/icon-192.png?v=10" alt="" width="34" height="34">
       <div>
         <h1>Naseem Trader</h1>
         <button class="market-pill" id="marketPill" type="button">XAUUSD · 1H</button>
@@ -70,6 +70,12 @@
           <summary id="orderHowTitle">Order kaise lagayein</summary>
           <ol id="orderSteps"></ol>
         </details>
+      </div>
+
+      <div class="card">
+        <div class="label">Pichle signals</div>
+        <ul class="history" id="recent"><li class="muted">—</li></ul>
+        <p class="fine" id="recentSum"></p>
       </div>
 
       <div class="card chart-card">
@@ -138,8 +144,8 @@
       <div class="card">
         <div class="label">Signal mode</div>
         <select id="setMode">
-          <option value="safe">Safe: kam signal, zyada mazboot (~2 har mahine)</option>
-          <option value="active">Active: zyada signal (~6 har mahine)</option>
+          <option value="active">Active: zyada signal (~6 har mahine) · recommended</option>
+          <option value="safe">Safe: bahut kam signal (~2 har mahine)</option>
         </select>
         <p class="fine" id="modeHint"></p>
       </div>
@@ -190,7 +196,7 @@
         <p class="fine" id="notifyState"></p>
       </div>
 
-      <p class="version">Naseem Trader v2.5</p>
+      <p class="version">Naseem Trader v2.6</p>
     </section>
   </main>
 
@@ -202,9 +208,9 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="instruments.js?v=9"></script>
-  <script src="indicators.js?v=9"></script>
-  <script src="platforms.js?v=9"></script>
-  <script src="app.js?v=9"></script>
+  <script src="instruments.js?v=10"></script>
+  <script src="indicators.js?v=10"></script>
+  <script src="platforms.js?v=10"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

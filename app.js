@@ -12,13 +12,18 @@
   const settings = {
     market: store.get('nt_market', 'XAUUSD'),
     platform: store.get('nt_platform', 'mt5'),
-    mode: store.get('nt_mode', 'safe') === 'active' ? 'active' : 'safe',
+    mode: store.get('nt_mode', 'active') === 'safe' ? 'safe' : 'active',
     balance: parseFloat(store.get('nt_balance', store.get('gs_balance', '1000'))) || 1000,
     risk: parseFloat(store.get('nt_risk', store.get('gs_risk', '1'))) || 1,
     contract: store.get('nt_contract', ''),
     key: store.get('nt_key', store.get('gs_key', '')),
     filter: store.get('nt_filter', store.get('gs_filter', '1')) === '1',
   };
+  let migratedToActive = false;
+  if (store.get('nt_mode_v26', null) === null) { // v2.6: Active is the default; switch everyone once
+    store.set('nt_mode_v26', '1');
+    if (settings.mode !== 'active') { settings.mode = 'active'; store.set('nt_mode', 'active'); migratedToActive = true; }
+  }
   let inst = MARKETS.byId(settings.market);
   let timer = null, loading = false, lastView = null, loadSeq = 0, lastSource = '', lastData = null, mkt = { closed: false, stale: false };
 
@@ -160,11 +165,7 @@
       $('mt5Card').hidden = true;
       const raw = GS.signalAt(ind, candles, lastClosed, settings.mode);
       const rejected = raw && settings.filter && !raw.passed;
-      renderAction({ kind: 'wait', why: mkt.closed ? 'Market abhi band hai (weekend).'
-        : rejected ? `${raw.side} ka signal bana tha lekin wo fake lag raha tha, is liye filter ne rok diya.`
-        : trend === 'side' ? 'Market sideways hai, koi saaf rukh nahi.'
-        : trend === 'up' ? 'Market upar ja rahi hai. BUY ke sahi mauqe ka intezar hai.'
-        : trend === 'down' ? 'Market neeche ja rahi hai. SELL ke sahi mauqe ka intezar hai.' : 'Sahi mauqe ka intezar hai.' });
+      renderAction(marketPlan(ind, candles, lastClosed, price, trend, rejected ? raw : null));
       if (rejected) {
         $('signalNote').textContent = `${raw.side} signal bana lekin filter ne reject kar diya (fake ho sakta hai). Trade na lein.`;
         renderChecks(raw.checks);
@@ -207,22 +208,57 @@
     let late = '';
     if (mkt.closed) late = 'Market abhi band hai. Market khulne par app dobara dekhein.';
     else if (mkt.stale) late = 'Price ka data purana hai, is liye abhi trade na lagayein. Internet check kar ke Refresh dabayein.';
-    else if (active.tp1Hit) late = 'Ye trade pehle hi TP1 tak pohanch chuki hai. Ab entry ka waqt guzar gaya.';
-    else if (progR > (isNew ? 0.5 : 0.3)) late = 'Price entry se kaafi aage nikal chuki hai. Ab entry lena faidemand nahi.';
+    else if (active.tp1Hit) late = `Ye trade TP1 tak pohanch chuki hai aur abhi ${progR >= 0 ? '+' : ''}${fmt(progR, 1)}R munafe mein hai. Nayi entry ka waqt guzar gaya; agla signal is ke band hone ke baad aayega.`;
+    else if (progR > (isNew ? 0.5 : 0.3)) late = `Price entry se ${fmt(progR, 1)}R aage nikal chuki hai. Ab entry lena faidemand nahi; agla signal is trade ke band hone ke baad aayega.`;
     else if (progR < -0.5) late = 'Price Stop Loss ke qareeb ja rahi hai. Is waqt nayi entry na lein.';
     renderAction({ kind: late ? 'late' : 'enter', why: late, t: active, dir, order, riskUsd });
     maybeNotify(active);
   }
 
   // "Aapko kya karna hai": numbered steps in simple words so someone with no experience can place the trade.
+  // No trade to take right now: say which way the market is going and where the next entry would come,
+  // so the user can set a price alert in MT5 instead of staring at "WAIT".
+  function marketPlan(ind, candles, i, price, trend, rejected) {
+    if (mkt.closed) return { kind: 'wait', why: 'Market abhi band hai (weekend). Peer subah (Pakistan time) khulegi.' };
+    if (mkt.stale) return { kind: 'wait', why: 'Price ka data purana hai. Internet check kar ke Refresh dabayein.' };
+    const htf = ind.htf[i], zone = ind.e21[i], a = ind.atr[i];
+    const dir = trend === 'up' && htf === 'up' ? 1 : trend === 'down' && htf === 'down' ? -1 : 0;
+    const rej = rejected ? `${rejected.side} ka signal bana tha lekin kamzor tha (fake ho sakta tha), is liye nahi diya. ` : '';
+    if (!dir) {
+      const why = trend === 'side' ? 'Market sideways hai, koi saaf rukh nahi.'
+        : trend === 'unknown' ? 'Data kam hai.'
+        : `1H trend ${trend === 'up' ? 'upar' : 'neeche'} hai lekin 4H trend ${htf === 'up' ? 'upar' : 'neeche'}. Jab tak dono ek taraf na hon, trade na karein.`;
+      return { kind: 'wait', why: rej + why };
+    }
+    const side = dir > 0 ? 'BUY' : 'SELL';
+    const gap = (price - zone) * dir; // >0: price is still away from the zone on the trend side
+    const where = gap > 0.15 * a
+      ? `Price abhi zone se ${fmtP(gap)} ${dir > 0 ? 'upar' : 'neeche'} hai.`
+      : 'Price abhi zone ke qareeb hai. Agli 1H candle par signal ban sakta hai.';
+    return { kind: 'plan', dir, side, zone, rej, where,
+      why: `Gold ${dir > 0 ? 'upar' : 'neeche'} ja raha hai (1H aur 4H dono trend ${dir > 0 ? 'upar' : 'neeche'}). Ab ${side} ka mauqa dhoonda ja raha hai.` };
+  }
+
   function renderAction(a) {
     const box = $('actionBox');
     box.className = 'action ' + a.kind + (a.dir ? (a.dir > 0 ? ' buy' : ' sell') : '');
     box.hidden = false;
+    if (a.kind === 'plan') {
+      const back = a.dir > 0 ? 'neeche aaye' : 'upar aaye', close = a.dir > 0 ? 'upar' : 'neeche';
+      box.innerHTML = `<div class="act-head">Market plan: ${a.side} ka intezar</div>
+        <p class="act-why">${esc(a.rej + a.why)}</p>
+        <ol class="act-steps">
+          <li><span>${a.side} zone (EMA21)</span><b class="act-val" id="acZone">${fmtP(a.zone)}</b><button class="copy" data-copy="acZone" type="button">Copy</button><small>${esc(a.where)}</small></li>
+          <li><span>MT5 mein is price par alert lagayein</span><small>Chart par right click → Alert / Trade → Alert, ya mobile mein Quotes → symbol → Alert. Zone ki price har ghante thori badalti hai.</small></li>
+          <li><span>Jab price zone tak ${back} aur 1H candle ${close} band ho</span><small>Yahan "Abhi ${a.side} karein" aa jayega, SL aur TP ke saath, aur phone par alarm bhi bajega. Us se pehle khud entry na lein.</small></li>
+        </ol>
+        ${settings.mode === 'safe' ? '<p class="act-small">Safe mode mein signal sirf EMA cross par aata hai (bahut kam). Zyada mauqon ke liye Settings → Signal mode → Active.</p>' : ''}`;
+      return;
+    }
     if (a.kind === 'wait') {
       box.innerHTML = `<div class="act-head">Abhi koi trade na lagayein</div>
         <p class="act-why">${esc(a.why)}</p>
-        <p class="act-small">Jab BUY ya SELL ka mauqa banega to yahan likha aayega ke kya karna hai, aur phone par alert bhi aayega.</p>`;
+        <p class="act-small">Jab 1H aur 4H trend ek taraf honge to yahan agla mauqa aur us ki price dikhegi. Signal banne par phone par alarm bhi aayega.</p>`;
       return;
     }
     const t = a.t, side = t.side, plat = PLATFORMS.byId(settings.platform).short;
@@ -310,9 +346,18 @@
     $('btBody').innerHTML = rows.map(([n, f]) => `<tr><td>${n}</td><td>${f(btF)}</td><td>${f(btN)}</td></tr>`).join('');
 
     const bt = settings.filter ? btF : btN;
-    const hist = bt.trades.slice(-12).reverse();
-    $('history').innerHTML = hist.length ? hist.map(t => {
-      const label = t.result === 'open' ? (t.tp1Hit ? 'TP1 hit, chal rahi' : 'Chal rahi')
+    $('history').innerHTML = historyHtml(bt.trades, 12, candles[candles.length - 1].c);
+    $('recent').innerHTML = historyHtml(bt.trades, 4, candles[candles.length - 1].c);
+    const last30 = bt.trades.filter(t => t.result !== 'open' && t.time >= candles[lastClosed].t - 30 * 24 * H);
+    const r30 = last30.reduce((s, t) => s + t.r, 0);
+    $('recentSum').textContent = last30.length ? `Pichle 30 din: ${last30.length} trade, ${last30.filter(t => t.r > 0).length} munafe mein, kul ${r30 >= 0 ? '+' : ''}${fmt(r30, 1)}R` : 'Pichle 30 din mein koi trade band nahi hui.';
+  }
+
+  function historyHtml(trades, n, price) {
+    const hist = trades.slice(-n).reverse();
+    return hist.length ? hist.map(t => {
+      const liveR = (price - t.entry) * (t.side === 'BUY' ? 1 : -1) / t.slDist;
+      const label = t.result === 'open' ? (t.tp1Hit ? 'TP1 ho gaya, chal rahi ' : 'Chal rahi ') + (liveR >= 0 ? '+' : '') + fmt(liveR, 1) + 'R'
         : { tp: 'TP2', sl: t.tp1Hit ? 'SL (TP1 ke baad)' : 'SL', time: 'Time' }[t.exit] + ' ' + (t.r > 0 ? '+' : '') + fmt(t.r, 1) + 'R';
       const cls = t.result === 'open' ? 'open' : t.r > 0 ? 'win' : 'loss';
       return `<li><span><span class="tag ${t.side.toLowerCase()}">${t.side}</span> ${fmtP(t.entry)} · ${fmtTime(t.time + H)}</span><span class="res ${cls}">${label}</span></li>`;
@@ -527,8 +572,8 @@
   const modeHint = () => {
     const m = GS.MODES[$('setMode').value];
     $('modeHint').textContent = $('setMode').value === 'active'
-      ? `Har mahine takreeban ${m.perMonth} signal (Gold). Zyada mauqe milte hain lekin loss wali trades bhi zyada hoti hain (win ~${m.win}%). Risk 1% ya kam rakhein. Mobile alert ke liye naya topic subscribe karein (neeche).`
-      : `Har mahine takreeban ${m.perMonth} signal (Gold). Kam lekin zyada mazboot signal (win ~${m.win}%). Kai hafte signal na aana normal hai.`;
+      ? `Har mahine takreeban ${m.perMonth} signal (Gold). Trend mein pullback par bhi entry deta hai. Loss wali trades bhi aati hain (win ~${m.win}%), is liye risk 1% ya kam rakhein.`
+      : `Har mahine takreeban ${m.perMonth} signal (Gold), win ~${m.win}%. Kai hafte signal na aana normal hai. Is ke mobile alert ka topic alag hai (neeche).`;
   };
   modeHint();
   $('setMode').addEventListener('change', modeHint);
@@ -614,4 +659,5 @@
   showNotifyState();
   schedule();
   refresh();
+  if (migratedToActive) setTimeout(() => toast('Active mode ON: ab zyada signal milenge'), 800);
 })();
