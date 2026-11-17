@@ -39,6 +39,10 @@
     "XAUUSD-active": {
       "init": true,
       "lastSignal": 1794542400000
+    },
+    "XAUUSD-scalp": {
+      "init": true,
+      "lastSignal": 1794850200000
     }
   }
 }
