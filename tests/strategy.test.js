@@ -398,3 +398,16 @@ test('alert job (Scalp): replay on 15m gives signal -> result in order and match
 test('ntfy topic for Scalp mode', () => {
   assert.equal(M.topicFor('XAUUSD', 'scalp'), 'naseem-trader-8cb48b4cb5-xauusd-scalp');
 });
+
+// ---------- markets ----------
+test('Only markets graded ok/strong get a pick, and grades exist for safe and active', () => {
+  for (const m of M.INSTRUMENTS) {
+    assert.ok(['strong', 'ok', 'weak', 'loss'].includes(M.grade(m, 'safe')), m.id);
+    assert.ok(['strong', 'ok', 'weak', 'loss'].includes(M.grade(m, 'active')), m.id);
+    if (m.pick) assert.ok(['strong', 'ok'].includes(M.grade(m, m.pick)), m.id + ' pick ' + m.pick);
+  }
+  assert.equal(M.byId('XAUUSD').pick, 'active');
+  assert.equal(M.byId('USDJPY').pick, undefined);
+  assert.equal(M.grade(M.byId('BTCUSD'), 'scalp'), 'untested');
+  assert.equal(M.ALL_TOPIC, 'naseem-trader-8cb48b4cb5-all');
+});

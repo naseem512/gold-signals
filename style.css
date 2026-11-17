@@ -225,3 +225,9 @@ label.check input { width: 20px; height: 20px; margin: 0; flex: none; }
 .action.plan.buy { border-color: rgba(32,197,107,.35); } .action.plan.sell { border-color: rgba(240,71,90,.35); }
 .action.plan .act-head { color: var(--gold); }
 .action.plan .act-head::before { content: '🎯'; }
+
+/* ---------- all-markets scanner ---------- */
+.scan li { cursor: pointer; }
+.scan li small { color: var(--muted); font-size: 11px; display: block; }
+.res.buy { color: var(--buy); } .res.sell { color: var(--sell); }
+.res.new { font-weight: 750; } .res.plan { color: var(--gold); } .res.muted { color: var(--muted); }

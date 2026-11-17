@@ -67,12 +67,12 @@
 
   // Gap between the Binance feed (PAXG) and spot gold. Falls back to the last good value (up to 3 days,
   // e.g. over the weekend when the spot quote is frozen), else null = show the raw feed with a warning.
-  async function fetchSpotOffset(feedPrice) {
-    const key = 'nt_spot_' + inst.id;
+  async function fetchSpotOffset(m, feedPrice) {
+    const key = 'nt_spot_' + m.id;
     try {
       const ctl = new AbortController();
       const tm = setTimeout(() => ctl.abort(), 6000);
-      const res = await fetch(MARKETS.SPOT_URL(inst.spot), { cache: 'no-store', signal: ctl.signal });
+      const res = await fetch(MARKETS.SPOT_URL(m.spot), { cache: 'no-store', signal: ctl.signal });
       clearTimeout(tm);
       const off = MARKETS.spotOffset(await res.json(), feedPrice, Date.now());
       if (off != null) { store.set(key, JSON.stringify({ off, t: Date.now() })); return off; }
@@ -84,17 +84,65 @@
     return null;
   }
 
-  async function loadCandles() {
+  // Candles for any market. null = this market needs a TwelveData key.
+  async function loadFor(m, tf) {
     let candles, source, offset = null;
-    if (inst.td && settings.key) { candles = await fetchTwelve(inst.td, settings.key, MODE().tf); source = 'TwelveData ' + inst.td; }
-    else if (inst.binance) {
-      candles = await fetchBinance(inst.binance, MODE().tf); source = 'Binance ' + inst.binance;
-      if (inst.spot) offset = await fetchSpotOffset(candles[candles.length - 1].c);
+    if (m.td && settings.key) { candles = await fetchTwelve(m.td, settings.key, tf); source = 'TwelveData ' + m.td; }
+    else if (m.binance) {
+      candles = await fetchBinance(m.binance, tf); source = 'Binance ' + m.binance;
+      if (m.spot) offset = await fetchSpotOffset(m, candles[candles.length - 1].c);
     }
-    else throw Object.assign(new Error(`${inst.name} ke liye TwelveData API key chahiye (Settings).`), { needKey: true });
-    if (inst.closesWeekend) candles = GS.marketCandles(candles);
+    else return null;
+    if (m.closesWeekend) candles = GS.marketCandles(candles);
     if (candles.length < 300) throw new Error('Data kam hai (' + candles.length + ' candles)');
     return { candles, source, offset };
+  }
+
+  async function loadCandles() {
+    const d = await loadFor(inst, MODE().tf);
+    if (!d) throw Object.assign(new Error(`${inst.name} ke liye TwelveData API key chahiye (Settings).`), { needKey: true });
+    return d;
+  }
+
+  // ---------- all-markets scanner ----------
+  // Each market is checked with its best-tested mode (MARKETS pick). Refreshed at most every 5 minutes.
+  let scanAt = 0, scanBusy = false;
+  function summarize(m, candles, mode) {
+    const md = GS.modeOf(mode), now = Date.now(), last = candles.length - 1;
+    if (m.closesWeekend && GS.isMarketClosed(now)) return { cls: 'muted', text: 'Market band' };
+    const lc = candles[last].t + md.iv > now ? last - 1 : last;
+    const ind = GS.computeAll(candles, md.iv);
+    const bt = GS.backtest(candles, ind, lc, true, m.cost, mode);
+    const t = bt.trades[bt.trades.length - 1], price = candles[last].c;
+    if (t && t.result === 'open') {
+      const dir = t.side === 'BUY' ? 1 : -1, r = (price - t.entry) * dir / t.slDist;
+      const fresh = !t.tp1Hit && r <= (t.index === lc ? 0.5 : 0.3) && r >= -0.5;
+      return fresh ? { cls: t.side.toLowerCase() + ' new', text: `Abhi ${t.side} karein` }
+        : { cls: 'open', text: `${t.side} chal rahi ${r >= 0 ? '+' : ''}${fmt(r, 1)}R` };
+    }
+    const tr = GS.trendAt(ind, candles, lc), htf = ind.htf[lc];
+    if (tr === 'up' && htf === 'up') return { cls: 'plan', text: `BUY zone ${Number(ind.e21[lc]).toFixed(m.digits)}` };
+    if (tr === 'down' && htf === 'down') return { cls: 'plan', text: `SELL zone ${Number(ind.e21[lc]).toFixed(m.digits)}` };
+    return { cls: 'muted', text: 'Intezar (rukh saaf nahi)' };
+  }
+
+  async function scan(force) {
+    if (scanBusy || (!force && Date.now() - scanAt < 5 * 60 * 1000)) return;
+    scanBusy = true; scanAt = Date.now();
+    const onBinance = PLATFORMS.byId(settings.platform).kind.startsWith('binance');
+    const rows = [];
+    for (const m of MARKETS.INSTRUMENTS.filter(x => x.pick)) {
+      let s;
+      try {
+        const d = await loadFor(m, GS.modeOf(m.pick).tf);
+        if (!d) s = { cls: 'muted', text: 'TwelveData key chahiye' };
+        else s = summarize(m, d.offset != null && !onBinance ? GS.shiftCandles(d.candles, d.offset) : d.candles, m.pick);
+      } catch { s = { cls: 'muted', text: 'Data load nahi hua' }; }
+      rows.push(`<li data-m="${m.id}" data-mode="${m.pick}"><span><b>${esc(m.name)}</b> <small>${m.id} · ${GS.modeOf(m.pick).name} · ${MARKETS.GRADE_LABEL[MARKETS.grade(m, m.pick)]}</small></span><span class="res ${s.cls}">${esc(s.text)}</span></li>`);
+    }
+    $('scanList').innerHTML = rows.join('');
+    $('scanTime').textContent = 'Update: ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    scanBusy = false;
   }
 
   // ---------- render ----------
@@ -324,15 +372,12 @@
   }
 
   function renderReport(candles, btF, btN, lastClosed) {
-    const v = inst.tested;
+    const v = MARKETS.grade(inst, settings.mode);
     const md = GS.MODES[settings.mode];
     $('verdictCard').className = 'card verdict ' + v;
-    // Active on gold is profitable in tests but clearly weaker than Safe, so it is not called "Mazboot".
-    const label = settings.mode === 'scalp' && v === 'strong' ? 'Kamzor ⚠' : settings.mode === 'active' && v === 'strong' ? 'Theek ✓' : { strong: 'Mazboot ✓', weak: 'Kamzor ⚠', loss: 'Ghaata ✗' }[v];
-    $('verdictText').textContent = label + ' · ' + inst.id + ' · ' + md.name;
+    $('verdictText').textContent = MARKETS.GRADE_LABEL[v] + ' · ' + inst.id + ' · ' + md.name;
     const pfTxt = btF.profitFactor == null ? '—' : btF.profitFactor === Infinity ? '∞' : fmt(btF.profitFactor);
-    const modeNote = settings.mode === 'safe' ? ''
-      : inst.id !== 'XAUUSD' ? ` ${md.name} mode sirf Gold par test hua hai.`
+    const modeNote = settings.mode === 'safe' || inst.id !== 'XAUUSD' ? ''
       : settings.mode === 'active' ? ' Active mode: 2.5 saal mein har mahine ~6 signal, profit factor ~1.5, lekin Safe se zyada loss wali trades.'
       : ' Scalp 15m: 2 saal mein har mahine ~19 signal, lekin win sirf ~31% (10 mein se ~7 SL) aur lagatar 12 loss tak aaye. Risk 0.5% ya kam rakhein.';
     $('verdictNote').textContent = MARKETS.TEST_NOTE[v] + modeNote + ` Pichle ${Math.round((candles[lastClosed].t - candles[0].t) / (24 * H))} din: profit factor ${pfTxt}.`;
@@ -528,6 +573,12 @@
     if (name === 'signal') requestAnimationFrame(drawChart);
   }
 
+  function marketHintText(m, mode) {
+    const g = MARKETS.grade(m, mode);
+    const best = m.pick ? ` Is market ke liye behtareen mode: ${GS.modeOf(m.pick).name}.` : ' Is market par koi mode achha nahi nikla. Trade na karein ya bahut kam risk lein.';
+    return `${GS.modeOf(mode).name} mode: ${MARKETS.GRADE_LABEL[g]}. ${MARKETS.TEST_NOTE[g]}${best}` + (m.td && !m.binance ? ' Is market ke liye TwelveData key zaroori hai.' : '');
+  }
+
   function applyMarketUI() {
     $('marketPill').textContent = inst.id + ' · ' + GS.MODES[settings.mode].name + ' · ' + PLATFORMS.byId(settings.platform).short;
     $('chartTf').textContent = MODE().tf;
@@ -537,7 +588,8 @@
     $('ntfyLink').href = 'https://ntfy.sh/' + topic;
     $('setContract').placeholder = 'Default: ' + inst.contract;
     const needKey = inst.td && !inst.binance;
-    $('marketHint').textContent = MARKETS.TEST_NOTE[inst.tested] + (needKey ? ' Is market ke liye TwelveData key zaroori hai.' : '');
+    $('marketHint').textContent = marketHintText(inst, settings.mode);
+    $('topicAll').textContent = MARKETS.ALL_TOPIC;
   }
 
   // ---------- loop ----------
@@ -552,6 +604,7 @@
       if (seq !== loadSeq || forInst !== inst.id) return; // market changed meanwhile
       lastData = { candles, source, offset };
       render(candles, source, offset);
+      scan(); // other markets, at most every 5 minutes
     } catch (e) {
       setStatus('err', 'Error');
       showBanner((e.needKey ? '' : 'Data load nahi hua: ') + e.message, true);
@@ -571,7 +624,7 @@
 
   // ---------- init ----------
   $('setMarket').innerHTML = MARKETS.INSTRUMENTS.map(m =>
-    `<option value="${m.id}">${m.name} (${m.id})${m.tested === 'strong' ? ' ✓ Mazboot' : m.tested === 'loss' ? ' ✗ Ghaata' : ' ⚠ Kamzor'}</option>`).join('');
+    `<option value="${m.id}">${m.name} (${m.id})${m.pick ? ' · ' + MARKETS.GRADE_LABEL[MARKETS.grade(m, m.pick)] + ' (' + GS.modeOf(m.pick).name + ')' : ' · ✗ Kamzor/Ghaata'}</option>`).join('');
   $('setMarket').value = inst.id;
   $('setMode').value = settings.mode;
   const modeHint = () => {
@@ -584,7 +637,7 @@
         : `1H chart. Har mahine takreeban ${m.perMonth} signal (Gold), win ~${m.win}%. Kai hafte signal na aana normal hai. Is ka mobile alert topic alag hai (neeche).`;
   };
   modeHint();
-  $('setMode').addEventListener('change', modeHint);
+  $('setMode').addEventListener('change', () => { modeHint(); $('marketHint').textContent = marketHintText(MARKETS.byId($('setMarket').value), $('setMode').value); });
   $('setPlatform').innerHTML = PLATFORMS.PLATFORMS.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
   $('setPlatform').value = PLATFORMS.byId(settings.platform).id;
   const platformHint = () => {
@@ -604,7 +657,7 @@
 
   $('setMarket').addEventListener('change', () => {
     const m = MARKETS.byId($('setMarket').value);
-    $('marketHint').textContent = MARKETS.TEST_NOTE[m.tested] + (m.td && !m.binance ? ' Is market ke liye TwelveData key zaroori hai.' : '');
+    $('marketHint').textContent = marketHintText(m, $('setMode').value);
     platformHint();
   });
 
@@ -643,6 +696,13 @@
     if (btn) copyText($(btn.dataset.copy).textContent);
   });
   $('copyTopic').addEventListener('click', () => copyText($('topic').textContent));
+  $('copyTopicAll').addEventListener('click', () => copyText($('topicAll').textContent));
+  $('scanList').addEventListener('click', e => {
+    const li = e.target.closest('li[data-m]');
+    if (!li) return;
+    $('setMarket').value = li.dataset.m; $('setMode').value = li.dataset.mode;
+    $('btnSave').click(); // same path as saving Settings: switches market + mode and reloads
+  });
 
   $('btnNotify').addEventListener('click', async () => {
     if (!('Notification' in window)) return showNotifyState();

@@ -69,8 +69,12 @@ async function candlesFor(inst, tf = '1H') {
   return inst.closesWeekend ? GS.marketCandles(c) : c;
 }
 
-async function notify(inst, { title, body, tags, priority }, mode = 'active') {
-  const topic = M.topicFor(inst.id, mode);
+async function notify(inst, ev, mode = 'active') {
+  await post(M.topicFor(inst.id, mode), ev);
+  if (inst.pick === mode) await post(M.ALL_TOPIC, ev); // combined "best markets" topic
+}
+
+async function post(topic, { title, body, tags, priority }) {
   if (DRY) { console.log(`[DRY] -> ${topic}\n  ${title}\n  ${body.replace(/\n/g, '\n  ')}`); return; }
   const res = await fetch(`${NTFY}/${topic}`, {
     method: 'POST',
@@ -162,11 +166,13 @@ async function checkMarket(inst, st, now, candlesOverride, mode = 'safe') {
 async function main() {
   const now = Date.now();
   if (process.env.TEST === '1') {
+    await post(M.ALL_TOPIC, { title: 'Naseem Trader: sab markets ke alerts ON', tags: 'bell,rotating_light', priority: 5,
+      body: 'Test alert. Gold, BTC, ETH (aur key ho to Silver, GBPUSD) ke behtareen mode ke signal isi topic par aayenge.' });
     for (const inst of M.INSTRUMENTS) for (const mode of MODES) {
-      await notify(inst, {
+      await post(M.topicFor(inst.id, mode), { // per-mode topic only; the combined topic got its own test above
         title: `Naseem Trader: ${inst.id}${tag(mode)} alerts ON`, tags: 'bell,rotating_light', priority: 5, // max priority so the alarm setup can be tested
-        body: `Test alert. ${inst.id} ${mode === 'active' ? 'Active' : 'Safe'} mode ke naye signal, TP1, TP2 aur SL ke alerts isi topic par aayenge.`,
-      }, mode);
+        body: `Test alert. ${inst.id} ${GS.modeOf(mode).name} mode ke naye signal, TP1, TP2 aur SL ke alerts isi topic par aayenge.`,
+      });
     }
     return;
   }

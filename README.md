@@ -45,6 +45,11 @@ Binance is also the default **price source** for gold (PAXG). This is only the p
 ## Spot gold calibration
 PAXG trades a few dollars away from spot gold (about $11 below spot in Nov 2026), and MT5 brokers quote spot. On each refresh the app and the alert job read a free spot quote (`api.gold-api.com/price/XAU`, no key) and shift the PAXG candles by the gap. Signals do not change, because EMA crosses, RSI, ATR and the filters are unaffected by a constant shift (a test checks this); only the price levels move onto spot. A quote that is stale (over 20 minutes old, e.g. at the weekend) or more than 3% away is ignored. The app then uses the last good gap for up to 3 days, or else shows the raw PAXG price with a warning. Binance platforms always see raw PAXG.
 
+## More markets (scanner + combined alerts)
+Every market was backtested in both modes on 2+ years of hourly data. Each market is graded per mode: strong, ok, weak or loss. Only gold is strong, and only in Safe mode. The markets graded ok are gold (Active), BTC (Active), ETH (Safe), silver (Active, needs a key) and GBPUSD (Safe, needs a key). USDJPY, AUDUSD, EURUSD (Active), GBPJPY and oil were weak or losing.
+
+The Signal tab's **Sab markets** scanner checks each ok/strong market in its picked mode, at most every 5 minutes. Tapping a row opens that market. The cloud job also posts each picked-mode signal to the combined topic `…-all`. Without a key that covers gold, BTC and ETH, about 17 signals a month.
+
 ## Market plan (no open signal)
 Instead of a bare WAIT, the card states the trend. When the 1H and 4H trends agree, it shows the entry zone (EMA21), how far price is from it, and asks the user to set an MT5 price alert there. A "pending limit at EMA21" strategy was tested as an alternative. With one pending order at a time it was weaker (PF about 1.3 on both datasets), so it is not used.
 

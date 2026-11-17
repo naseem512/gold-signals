@@ -3,24 +3,31 @@
   // usdPerPoint(price): dollars gained/lost per 1.00 price move on 1.00 lot.
   const INSTRUMENTS = [
     { id: 'XAUUSD', name: 'Gold', digits: 2, cost: 0.5, contract: 100, usdPerPoint: () => 100,
-      binance: 'PAXGUSDT', spot: 'XAU', td: 'XAU/USD', closesWeekend: true, tested: 'strong' },
+      binance: 'PAXGUSDT', spot: 'XAU', td: 'XAU/USD', closesWeekend: true, tested: 'strong',
+      modes: { safe: 'strong', active: 'ok', scalp: 'weak' }, pick: 'active' },
     { id: 'XAGUSD', name: 'Silver', digits: 3, cost: 0.03, contract: 5000, usdPerPoint: () => 5000,
-      td: 'XAG/USD', closesWeekend: true, tested: 'weak' },
+      td: 'XAG/USD', closesWeekend: true, tested: 'weak', modes: { safe: 'weak', active: 'ok' }, pick: 'active' },
     { id: 'EURUSD', name: 'Euro / Dollar', digits: 5, cost: 0.00012, contract: 100000, usdPerPoint: () => 100000,
-      td: 'EUR/USD', closesWeekend: true, tested: 'weak' },
+      td: 'EUR/USD', closesWeekend: true, tested: 'weak', modes: { safe: 'weak', active: 'loss' } },
     { id: 'GBPUSD', name: 'Pound / Dollar', digits: 5, cost: 0.00015, contract: 100000, usdPerPoint: () => 100000,
-      td: 'GBP/USD', closesWeekend: true, tested: 'weak' },
+      td: 'GBP/USD', closesWeekend: true, tested: 'weak', modes: { safe: 'ok', active: 'weak' }, pick: 'safe' },
     { id: 'USDJPY', name: 'Dollar / Yen', digits: 3, cost: 0.015, contract: 100000, usdPerPoint: p => 100000 / p,
-      td: 'USD/JPY', closesWeekend: true, tested: 'loss' },
+      td: 'USD/JPY', closesWeekend: true, tested: 'loss', modes: { safe: 'loss', active: 'loss' } },
     { id: 'BTCUSD', name: 'Bitcoin', digits: 2, cost: 15, contract: 1, usdPerPoint: () => 1,
-      binance: 'BTCUSDT', closesWeekend: false, tested: 'weak' },
+      binance: 'BTCUSDT', closesWeekend: false, tested: 'weak', modes: { safe: 'weak', active: 'ok' }, pick: 'active' },
     { id: 'ETHUSD', name: 'Ethereum', digits: 2, cost: 1.2, contract: 1, usdPerPoint: () => 1,
-      binance: 'ETHUSDT', closesWeekend: false, tested: 'weak' },
+      binance: 'ETHUSDT', closesWeekend: false, tested: 'weak', modes: { safe: 'ok', active: 'weak' }, pick: 'safe' },
   ];
 
-  // Tested on 2 years of hourly data (2024-2026), filter ON, costs included.
+  // Grades per market AND mode, from 2+ years of hourly data (Binance / Yahoo, Nov 2026), filter ON, costs included:
+  //   strong = PF >= 1.8, both halves clearly profitable   ok = PF >= 1.15, both halves >= 1.0
+  //   weak   = barely profitable or one half losing         loss = PF < 1
+  //   (Gold safe 2.27/2.47, active 1.61/1.38 | BTC active 1.16 | ETH safe 1.28 | XAG active 1.19 | GBPUSD safe 1.40)
+  // pick = the mode used for this market in the all-markets scanner and the combined alert topic.
   const TEST_NOTE = {
     strong: 'Purane 2 saal ke data par dono hisson mein munafe mein rahi.',
+    ok: 'Purane 2 saal ke data par dono hisson mein thore munafe mein rahi. Gold jitni mazboot nahi, risk kam rakhein.',
+    untested: 'Is market par ye mode test nahi hua.',
     weak: 'Purane data par kamzor ya musalsal nahi. Kam risk lein.',
     loss: 'Purane data par ghaate mein rahi. Is market par is strategy se trade na karein.',
   };
@@ -29,6 +36,10 @@
   // ntfy topic per market: <NTFY_BASE>-<id lowercase>. The random part keeps strangers from guessing it.
   const NTFY_BASE = 'naseem-trader-8cb48b4cb5';
   // Active (the default mode) uses the main topic people already subscribed to; Safe has its own.
+  const grade = (inst, mode) => (inst.modes && inst.modes[mode]) || 'untested';
+  const GRADE_LABEL = { strong: 'Mazboot ✓', ok: 'Theek ✓', weak: 'Kamzor ⚠', loss: 'Ghaata ✗', untested: 'Test nahi hua' };
+  // One topic with the signals of every market's picked mode (only markets graded ok/strong get a pick).
+  const ALL_TOPIC = NTFY_BASE + '-all';
   const topicFor = (id, mode = 'active') => NTFY_BASE + '-' + id.toLowerCase() + (mode === 'active' ? '' : '-' + mode);
   const byId = id => INSTRUMENTS.find(m => m.id === id) || INSTRUMENTS[0];
 
@@ -45,7 +56,7 @@
     return price - feedPrice;
   }
 
-  const api = { INSTRUMENTS, TEST_NOTE, APP_URL, NTFY_BASE, topicFor, byId, SPOT_URL, spotOffset };
+  const api = { INSTRUMENTS, TEST_NOTE, APP_URL, NTFY_BASE, topicFor, byId, grade, GRADE_LABEL, ALL_TOPIC, SPOT_URL, spotOffset };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MARKETS = api;
 })(this);

@@ -9,12 +9,12 @@
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Naseem Trader</title>
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
   <header class="top">
     <div class="brand">
-      <img src="icons/icon-192.png?v=11" alt="" width="34" height="34">
+      <img src="icons/icon-192.png?v=12" alt="" width="34" height="34">
       <div>
         <h1>Naseem Trader</h1>
         <button class="market-pill" id="marketPill" type="button">XAUUSD · 1H</button>
@@ -70,6 +70,12 @@
           <summary id="orderHowTitle">Order kaise lagayein</summary>
           <ol id="orderSteps"></ol>
         </details>
+      </div>
+
+      <div class="card">
+        <div class="row-between"><span class="label">Sab markets</span><span class="muted small-txt" id="scanTime"></span></div>
+        <ul class="history scan" id="scanList"><li class="muted">Loading…</li></ul>
+        <p class="fine">Har market apne sab se behtar test hue mode par. Tap karein to wahi market khul jayegi. Ye sab "Theek" darje ke hain (Gold sirf Safe mode mein "Mazboot" hai), is liye risk 1% ya kam rakhein.</p>
       </div>
 
       <div class="card">
@@ -188,6 +194,8 @@
         </ol>
         <div class="topic"><code id="topic">—</code><button class="copy" id="copyTopic" type="button">Copy</button></div>
         <a class="link-btn" id="ntfyLink" href="#" target="_blank" rel="noopener">ntfy mein kholein</a>
+        <p class="fine"><b>Sab achi markets ek jagah:</b> ye topic subscribe karein to Gold (Active), BTC (Active), ETH (Safe) aur key ho to Silver aur GBPUSD ke signal bhi aayenge (~15-20 har mahine).</p>
+        <div class="topic"><code id="topicAll">—</code><button class="copy" id="copyTopicAll" type="button">Copy</button></div>
         <p class="fine">Har market aur har mode (Safe / Active) ka topic alag hai. Jo market aur mode upar chuna hai usi ka topic dikhta hai. Cloud har 20 minute baad check karta hai aur naya signal, TP1, TP2 ya SL hone par alert bhejta hai.</p>
       </div>
 
@@ -198,7 +206,7 @@
         <p class="fine" id="notifyState"></p>
       </div>
 
-      <p class="version">Naseem Trader v2.7</p>
+      <p class="version">Naseem Trader v2.8</p>
     </section>
   </main>
 
@@ -210,9 +218,9 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="instruments.js?v=11"></script>
-  <script src="indicators.js?v=11"></script>
-  <script src="platforms.js?v=11"></script>
-  <script src="app.js?v=11"></script>
+  <script src="instruments.js?v=12"></script>
+  <script src="indicators.js?v=12"></script>
+  <script src="platforms.js?v=12"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>
