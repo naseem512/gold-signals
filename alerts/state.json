@@ -41,8 +41,9 @@
       "lastSignal": 1794542400000
     },
     "XAUUSD-scalp": {
+      "announced": 1794906000000,
       "init": true,
-      "lastSignal": 1794850200000
+      "lastSignal": 1794906000000
     }
   }
 }
