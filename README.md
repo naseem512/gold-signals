@@ -18,6 +18,9 @@ An installable web app (PWA) that gives 1H BUY/SELL signals with SL/TP, lot size
 |---|---|---|---|---|
 | Safe | 2.3 / 1.6 | 46% / 50% | 2.27 / 2.47 | 4.1R / 4.1R |
 | Active | 5.8 / 5.1 | 40% / 38% | 1.61 / 1.38 | 13.8R / 8.2R |
+| Scalp 15m (2y PAXG 15m only) | 18.9 | 31% | 1.27 | 14.9R (12 losses in a row) |
+
+**Scalp 15m** applies the Active rules to 15-minute candles, with the same 4H trend filter and 72-hour hold. It was added on request for 15-20 signals a month. More signals came with lower quality: on 30m and 15m, every variant had a win rate of 27-41% and a PF of 1.03-1.61. Alerts go to `…-xauusd-scalp` and cover gold only. A late signal is announced only within 1 hour of the signal.
 
 Active was profitable in both halves of both datasets, at $1 cost, and at every SL (2–3 ATR) and target (2.5–4R) tested. It is clearly weaker than Safe per trade.
 

@@ -9,12 +9,12 @@
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Naseem Trader</title>
-  <link rel="stylesheet" href="style.css?v=10">
+  <link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
   <header class="top">
     <div class="brand">
-      <img src="icons/icon-192.png?v=10" alt="" width="34" height="34">
+      <img src="icons/icon-192.png?v=11" alt="" width="34" height="34">
       <div>
         <h1>Naseem Trader</h1>
         <button class="market-pill" id="marketPill" type="button">XAUUSD · 1H</button>
@@ -80,7 +80,7 @@
 
       <div class="card chart-card">
         <div class="row-between">
-          <span class="label">Chart · 1H</span>
+          <span class="label">Chart · <span id="chartTf">1H</span></span>
           <span class="legend"><i class="l21"></i>EMA21 <i class="l50"></i>EMA50</span>
         </div>
         <canvas id="chart" height="220"></canvas>
@@ -89,7 +89,7 @@
       <div class="card">
         <div class="label">Market ka haal</div>
         <div class="stats4">
-          <div><span>1H trend</span><b id="mTrend">—</b></div>
+          <div><span><span id="trendTf">1H</span> trend</span><b id="mTrend">—</b></div>
           <div><span>4H trend</span><b id="mHtf">—</b></div>
           <div><span>RSI 14</span><b id="mRsi">—</b></div>
           <div><span>ATR 14</span><b id="mAtr">—</b></div>
@@ -126,7 +126,8 @@
           <li><b>SELL:</b> EMA50 &lt; EMA200 aur price EMA200 se neeche, EMA9 EMA21 ko upar se cross kare, RSI 30–50.</li>
           <li><b>Active mode mein ye bhi:</b> trend chal raha ho, price wapas EMA21 tak aaye aur candle trend ki taraf band ho (pullback entry).</li>
           <li><b>Fake-signal filter:</b> 4H trend same taraf, signal candle mazboot (body &gt; 50%), price EMA21 se 1 ATR ke andar.</li>
-          <li>Signal sirf <b>band ho chuki</b> 1H candle par banta hai, baad mein badalta nahi.</li>
+          <li>Signal sirf <b>band ho chuki</b> candle par banta hai (Safe/Active: 1H, Scalp: 15m), baad mein badalta nahi.</li>
+          <li><b>Scalp 15m:</b> Active wale rules 15 minute candles par, 4H trend filter ke saath.</li>
           <li><b>SL</b> = 2.5 × ATR. <b>TP1</b> = 1R, <b>TP2</b> = 3R. Trade 72 ghante baad khud band.</li>
           <li>Weekend (market band) ka data hata diya jata hai.</li>
         </ul>
@@ -146,6 +147,7 @@
         <select id="setMode">
           <option value="active">Active: zyada signal (~6 har mahine) · recommended</option>
           <option value="safe">Safe: bahut kam signal (~2 har mahine)</option>
+          <option value="scalp">Scalp 15m: bahut zyada signal (~19 har mahine), kamzor</option>
         </select>
         <p class="fine" id="modeHint"></p>
       </div>
@@ -196,7 +198,7 @@
         <p class="fine" id="notifyState"></p>
       </div>
 
-      <p class="version">Naseem Trader v2.6</p>
+      <p class="version">Naseem Trader v2.7</p>
     </section>
   </main>
 
@@ -208,9 +210,9 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="instruments.js?v=10"></script>
-  <script src="indicators.js?v=10"></script>
-  <script src="platforms.js?v=10"></script>
-  <script src="app.js?v=10"></script>
+  <script src="instruments.js?v=11"></script>
+  <script src="indicators.js?v=11"></script>
+  <script src="platforms.js?v=11"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

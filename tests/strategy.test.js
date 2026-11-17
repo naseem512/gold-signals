@@ -342,3 +342,59 @@ test('ntfy topics: Active (default) uses the main topic, Safe has its own', () =
   assert.equal(M.topicFor('XAUUSD', 'active'), 'naseem-trader-8cb48b4cb5-xauusd');
   assert.equal(M.topicFor('XAUUSD', 'safe'), 'naseem-trader-8cb48b4cb5-xauusd-safe');
 });
+
+// ---------- Scalp 15m mode ----------
+const f15 = require('./fixtures/paxg-15m.json').map(([t, o, h, l, c]) => ({ t, o, h, l, c }));
+const IV15 = GS.modeOf('scalp').iv;
+
+test('Scalp 15m: 4H trend and signals do not repaint on 15-minute candles', () => {
+  const m = GS.marketCandles(f15), full = GS.computeAll(m, IV15);
+  let checked = 0;
+  for (let i = 2000; i < m.length; i += 7) {
+    const part = m.slice(0, i + 1), ind = GS.computeAll(part, IV15);
+    assert.equal(ind.htf[i], full.htf[i], 'htf at ' + i);
+    const a = GS.signalAt(ind, part, i, 'scalp'), b = GS.signalAt(full, m, i, 'scalp');
+    assert.deepEqual(a && [a.side, a.entry], b && [b.side, b.entry], 'signal at ' + i);
+    checked++;
+  }
+  assert.ok(checked > 200);
+});
+
+test('Scalp 15m: 72h max hold in candles, many more signals than 1H Active', () => {
+  const m = GS.marketCandles(f15), ind = GS.computeAll(m, IV15);
+  const bt = GS.backtest(m, ind, m.length - 2, true, 0.5, 'scalp');
+  assert.ok(bt.trades.length > 0);
+  for (const t of bt.trades) {
+    assert.equal(t.maxHold, 288);
+    if (t.exit === 'time') assert.equal(t.exitIndex - t.index, 288);
+  }
+  const days = (m.at(-1).t - m[0].t) / (24 * H);
+  assert.ok(bt.trades.length / days * 30 > 8, 'scalp should give well over 8 signals a month');
+  // 1H signals must keep the 1H hold
+  const h = GS.marketCandles(fixture), bh = GS.backtest(h, GS.computeAll(h), h.length - 2, true, 0.5, 'active');
+  assert.ok(bh.trades.every(t => t.maxHold === 72));
+});
+
+test('alert job (Scalp): replay on 15m gives signal -> result in order and matches the backtest', async () => {
+  const { checkMarket } = require('../alerts/check.js');
+  const inst = M.byId('XAUUSD');
+  const m = GS.marketCandles(f15);
+  const st = {}, log = [];
+  for (let i = 2500; i < m.length; i++) {
+    const now = m[i].t + IV15 + 5 * 60 * 1000;
+    const { events } = await checkMarket(inst, st, now, m.slice(0, i + 1), 'scalp');
+    for (const e of events) log.push({ i, title: e.title });
+  }
+  assert.ok(log.length > 0 && log.every(e => e.title.endsWith('(Scalp 15m)')));
+  let open = false;
+  for (const e of log) {
+    if (/abhi (BUY|SELL) karein/.test(e.title)) { assert.equal(open, false, 'overlap at ' + e.i); open = true; }
+    else if (!/TP1 hit/.test(e.title)) { assert.ok(open, 'result without signal at ' + e.i); open = false; }
+  }
+  const bt = GS.backtest(m, GS.computeAll(m, IV15), m.length - 1, true, inst.cost, 'scalp');
+  assert.equal(log.filter(e => /abhi (BUY|SELL) karein/.test(e.title)).length, bt.trades.filter(t => t.index >= 2501).length);
+});
+
+test('ntfy topic for Scalp mode', () => {
+  assert.equal(M.topicFor('XAUUSD', 'scalp'), 'naseem-trader-8cb48b4cb5-xauusd-scalp');
+});

@@ -34,11 +34,11 @@ async function getJSON(url, tries = 3) {
   throw lastErr;
 }
 
-async function binance(symbol) {
+async function binance(symbol, tf = '1H') {
   // Same endpoint and depth as the app. data-api.binance.vision is the public market-data mirror.
   let all = [], end = null;
   for (let p = 0; p < 4; p++) {
-    const rows = await getJSON(`https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=1h&limit=1000` + (end ? '&endTime=' + end : ''));
+    const rows = await getJSON(`https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${tf === '15m' ? '15m' : '1h'}&limit=1000` + (end ? '&endTime=' + end : ''));
     if (!rows.length) break;
     all = rows.concat(all);
     end = rows[0][0] - 1;
@@ -46,17 +46,17 @@ async function binance(symbol) {
   return all.map(r => ({ t: r[0], o: +r[1], h: +r[2], l: +r[3], c: +r[4] }));
 }
 
-async function twelve(symbol) {
-  const d = await getJSON(`https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=1h&outputsize=5000&timezone=UTC&apikey=${encodeURIComponent(KEY)}`);
+async function twelve(symbol, tf = '1H') {
+  const d = await getJSON(`https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=${tf === '15m' ? '15min' : '1h'}&outputsize=5000&timezone=UTC&apikey=${encodeURIComponent(KEY)}`);
   if (d.status !== 'ok' || !Array.isArray(d.values)) throw new Error('TwelveData: ' + (d.message || 'error'));
   return d.values.slice().reverse().map(v => ({ t: Date.parse(v.datetime.replace(' ', 'T') + 'Z'), o: +v.open, h: +v.high, l: +v.low, c: +v.close }));
 }
 
-async function candlesFor(inst) {
+async function candlesFor(inst, tf = '1H') {
   let c;
-  if (inst.td && KEY) c = await twelve(inst.td);
+  if (inst.td && KEY) c = await twelve(inst.td, tf);
   else if (inst.binance) {
-    c = await binance(inst.binance);
+    c = await binance(inst.binance, tf);
     if (inst.spot) { // alerts go to MT5 users: put PAXG levels onto spot gold
       try {
         const off = M.spotOffset(await getJSON(M.SPOT_URL(inst.spot), 2), c[c.length - 1].c, Date.now());
@@ -82,9 +82,11 @@ async function notify(inst, { title, body, tags, priority }, mode = 'active') {
 }
 
 function fmt(inst, n) { return Number(n).toFixed(inst.digits); }
-const tag = mode => (mode === 'safe' ? ' (Safe)' : '');
-const MODES = ['active', 'safe'];
-const stateKey = (inst, mode) => (mode === 'active' ? inst.id + '-active' : inst.id);
+const tag = mode => (mode === 'safe' ? ' (Safe)' : mode === 'scalp' ? ' (Scalp 15m)' : '');
+const MODES = ['active', 'safe', 'scalp'];
+const SCALP_MARKETS = ['XAUUSD']; // 15m mode was only tested on gold
+// 'XAUUSD' (no suffix) has always held Safe state; keep it so nothing re-announces.
+const stateKey = (inst, mode) => (mode === 'safe' ? inst.id : inst.id + '-' + mode);
 
 // Written for someone with no trading experience: what to press, where SL and TP go, what to do at TP1.
 function signalMessage(inst, t, mode = 'safe') {
@@ -110,8 +112,9 @@ async function checkMarket(inst, st, now, candlesOverride, mode = 'safe') {
   if (!candles) return { skipped: 'no TwelveData key' };
   if (candles.length < 300) throw new Error('too few candles: ' + candles.length);
   const last = candles.length - 1;
-  const lastClosed = candles[last].t + H > now ? last - 1 : last;
-  const ind = GS.computeAll(candles);
+  const iv = GS.modeOf(mode).iv;
+  const lastClosed = candles[last].t + iv > now ? last - 1 : last;
+  const ind = GS.computeAll(candles, iv);
   const bt = GS.backtest(candles, ind, lastClosed, true, inst.cost, mode);
   const t = bt.trades[bt.trades.length - 1];
   const events = [];
@@ -128,9 +131,9 @@ async function checkMarket(inst, st, now, candlesOverride, mode = 'safe') {
     st.lastSignal = t.time;
     // GitHub can start this job hours late. Announce only while the trade is still worth entering,
     // using the same rule as the app's "Abhi BUY/SELL karein" box.
-    const ageH = (now - (t.time + H)) / H;
+    const ageH = (now - (t.time + iv)) / H;
     const prog = (candles[last].c - t.entry) * (t.side === 'BUY' ? 1 : -1) / t.slDist;
-    if (t.result === 'open' && !t.tp1Hit && ageH <= 12 && prog <= 0.3 && prog >= -0.5) {
+    if (t.result === 'open' && !t.tp1Hit && ageH <= (mode === 'scalp' ? 1 : 12) && prog <= 0.3 && prog >= -0.5) {
       events.push(signalMessage(inst, t, mode)); st.announced = t.time;
     }
   }
@@ -173,11 +176,14 @@ async function main() {
   let failures = 0;
   for (const inst of M.INSTRUMENTS) {
     try {
-      const candles = await candlesFor(inst); // fetched once, used by both modes
+      const candles = await candlesFor(inst); // 1H, fetched once for Active and Safe
+      const c15 = SCALP_MARKETS.includes(inst.id) ? await candlesFor(inst, '15m') : null;
       for (const mode of MODES) {
+        if (mode === 'scalp' && !c15) continue;
         const key = stateKey(inst, mode);
         const st = state.markets[key] = state.markets[key] || {};
-        const { events = [], skipped, first } = candles ? await checkMarket(inst, st, now, candles, mode) : { skipped: 'no TwelveData key' };
+        const data = mode === 'scalp' ? c15 : candles;
+        const { events = [], skipped, first } = data ? await checkMarket(inst, st, now, data, mode) : { skipped: 'no TwelveData key' };
         console.log(`${key}: ${skipped ? 'skipped (' + skipped + ')' : (first ? 'initialised' : events.length + ' event(s)')}`);
         for (const ev of events) await notify(inst, ev, mode);
       }

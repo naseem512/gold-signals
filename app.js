@@ -12,7 +12,7 @@
   const settings = {
     market: store.get('nt_market', 'XAUUSD'),
     platform: store.get('nt_platform', 'mt5'),
-    mode: store.get('nt_mode', 'active') === 'safe' ? 'safe' : 'active',
+    mode: ['safe', 'scalp'].includes(store.get('nt_mode', 'active')) ? store.get('nt_mode', 'active') : 'active',
     balance: parseFloat(store.get('nt_balance', store.get('gs_balance', '1000'))) || 1000,
     risk: parseFloat(store.get('nt_risk', store.get('gs_risk', '1'))) || 1,
     contract: store.get('nt_contract', ''),
@@ -39,10 +39,12 @@
   };
 
   // ---------- data ----------
-  async function fetchBinance(symbol) {
+  const MODE = () => GS.modeOf(settings.mode);
+
+  async function fetchBinance(symbol, tf) {
     let all = [], end = null;
     for (let p = 0; p < 4; p++) { // 4000 candles ~ 5.5 months
-      const url = `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=1h&limit=1000` + (end ? '&endTime=' + end : '');
+      const url = `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${tf === '15m' ? '15m' : '1h'}&limit=1000` + (end ? '&endTime=' + end : '');
       const res = await fetch(url, { cache: 'no-store' });
       if (!res.ok) throw new Error('Binance ' + res.status);
       const rows = await res.json();
@@ -53,8 +55,8 @@
     return all.map(r => ({ t: r[0], o: +r[1], h: +r[2], l: +r[3], c: +r[4] }));
   }
 
-  async function fetchTwelve(symbol, key) {
-    const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=1h&outputsize=5000&timezone=UTC&apikey=${encodeURIComponent(key)}`;
+  async function fetchTwelve(symbol, key, tf) {
+    const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=${tf === '15m' ? '15min' : '1h'}&outputsize=5000&timezone=UTC&apikey=${encodeURIComponent(key)}`;
     const res = await fetch(url, { cache: 'no-store' });
     const data = await res.json();
     if (data.status !== 'ok' || !Array.isArray(data.values)) throw new Error('TwelveData: ' + (data.message || 'error'));
@@ -84,9 +86,9 @@
 
   async function loadCandles() {
     let candles, source, offset = null;
-    if (inst.td && settings.key) { candles = await fetchTwelve(inst.td, settings.key); source = 'TwelveData ' + inst.td; }
+    if (inst.td && settings.key) { candles = await fetchTwelve(inst.td, settings.key, MODE().tf); source = 'TwelveData ' + inst.td; }
     else if (inst.binance) {
-      candles = await fetchBinance(inst.binance); source = 'Binance ' + inst.binance;
+      candles = await fetchBinance(inst.binance, MODE().tf); source = 'Binance ' + inst.binance;
       if (inst.spot) offset = await fetchSpotOffset(candles[candles.length - 1].c);
     }
     else throw Object.assign(new Error(`${inst.name} ke liye TwelveData API key chahiye (Settings).`), { needKey: true });
@@ -105,8 +107,9 @@
     const calibrated = offset != null && fromBinance && !onBinance;
     const candles = calibrated ? GS.shiftCandles(rawCandles, offset) : rawCandles;
     const last = candles.length - 1;
-    const lastClosed = candles[last].t + H > now ? last - 1 : last;
-    const ind = GS.computeAll(candles);
+    const IV = MODE().iv;
+    const lastClosed = candles[last].t + IV > now ? last - 1 : last;
+    const ind = GS.computeAll(candles, IV);
     const btF = GS.backtest(candles, ind, lastClosed, true, inst.cost, settings.mode);
     const btN = GS.backtest(candles, ind, lastClosed, false, inst.cost, settings.mode);
     const bt = settings.filter ? btF : btN;
@@ -115,7 +118,7 @@
 
     // status + banner
     const closed = inst.closesWeekend && GS.isMarketClosed(now);
-    const stale = !closed && now - (candles[last].t + H) > 2 * H;
+    const stale = !closed && now - (candles[last].t + IV) > 2 * H;
     mkt = { closed, stale };
     setStatus(closed ? 'closed' : stale ? 'err' : 'live', closed ? 'Market band' : stale ? 'Data purana' : 'Live');
     showBanner(closed ? 'Market abhi band hai (weekend). Naye signal market khulne par aayenge.'
@@ -184,7 +187,7 @@
     card.classList.add(active.side.toLowerCase());
     $('signalText').textContent = active.side;
     $('signalChip').textContent = isNew ? 'NAYA SIGNAL' : active.tp1Hit ? 'TP1 HIT' : 'TRADE CHAL RAHI';
-    $('signalNote').textContent = 'Signal: ' + fmtTime(active.time + H) + ' (1H candle close)' + (active.kind === 'pullback' ? ' · Pullback entry' : '');
+    $('signalNote').textContent = 'Signal: ' + fmtTime(active.time + MODE().iv) + ` (${MODE().tf} candle close)` + (active.kind === 'pullback' ? ' · Pullback entry' : '');
 
     const order = PLATFORMS.orderFor(settings.platform, inst, active, {
       balance: settings.balance, riskPct: settings.risk, usdPerPoint: usdPerPoint(price), price,
@@ -208,7 +211,7 @@
     let late = '';
     if (mkt.closed) late = 'Market abhi band hai. Market khulne par app dobara dekhein.';
     else if (mkt.stale) late = 'Price ka data purana hai, is liye abhi trade na lagayein. Internet check kar ke Refresh dabayein.';
-    else if (active.tp1Hit) late = `Ye trade TP1 tak pohanch chuki hai aur abhi ${progR >= 0 ? '+' : ''}${fmt(progR, 1)}R munafe mein hai. Nayi entry ka waqt guzar gaya; agla signal is ke band hone ke baad aayega.`;
+    else if (active.tp1Hit) late = `Ye trade TP1 tak pohanch chuki hai aur abhi ${progR >= 0 ? '+' : ''}${fmt(progR, 1)}R ${progR >= 0 ? 'munafe' : 'nuqsan'} mein hai. Nayi entry ka waqt guzar gaya; agla signal is ke band hone ke baad aayega.`;
     else if (progR > (isNew ? 0.5 : 0.3)) late = `Price entry se ${fmt(progR, 1)}R aage nikal chuki hai. Ab entry lena faidemand nahi; agla signal is trade ke band hone ke baad aayega.`;
     else if (progR < -0.5) late = 'Price Stop Loss ke qareeb ja rahi hai. Is waqt nayi entry na lein.';
     renderAction({ kind: late ? 'late' : 'enter', why: late, t: active, dir, order, riskUsd });
@@ -227,16 +230,16 @@
     if (!dir) {
       const why = trend === 'side' ? 'Market sideways hai, koi saaf rukh nahi.'
         : trend === 'unknown' ? 'Data kam hai.'
-        : `1H trend ${trend === 'up' ? 'upar' : 'neeche'} hai lekin 4H trend ${htf === 'up' ? 'upar' : 'neeche'}. Jab tak dono ek taraf na hon, trade na karein.`;
+        : `${MODE().tf} trend ${trend === 'up' ? 'upar' : 'neeche'} hai lekin 4H trend ${htf === 'up' ? 'upar' : 'neeche'}. Jab tak dono ek taraf na hon, trade na karein.`;
       return { kind: 'wait', why: rej + why };
     }
     const side = dir > 0 ? 'BUY' : 'SELL';
     const gap = (price - zone) * dir; // >0: price is still away from the zone on the trend side
     const where = gap > 0.15 * a
       ? `Price abhi zone se ${fmtP(gap)} ${dir > 0 ? 'upar' : 'neeche'} hai.`
-      : 'Price abhi zone ke qareeb hai. Agli 1H candle par signal ban sakta hai.';
+      : `Price abhi zone ke qareeb hai. Agli ${MODE().tf} candle par signal ban sakta hai.`;
     return { kind: 'plan', dir, side, zone, rej, where,
-      why: `Gold ${dir > 0 ? 'upar' : 'neeche'} ja raha hai (1H aur 4H dono trend ${dir > 0 ? 'upar' : 'neeche'}). Ab ${side} ka mauqa dhoonda ja raha hai.` };
+      why: `${inst.name} ${dir > 0 ? 'upar' : 'neeche'} ja raha hai (${MODE().tf} aur 4H dono trend ${dir > 0 ? 'upar' : 'neeche'}). Ab ${side} ka mauqa dhoonda ja raha hai.` };
   }
 
   function renderAction(a) {
@@ -250,7 +253,7 @@
         <ol class="act-steps">
           <li><span>${a.side} zone (EMA21)</span><b class="act-val" id="acZone">${fmtP(a.zone)}</b><button class="copy" data-copy="acZone" type="button">Copy</button><small>${esc(a.where)}</small></li>
           <li><span>MT5 mein is price par alert lagayein</span><small>Chart par right click → Alert / Trade → Alert, ya mobile mein Quotes → symbol → Alert. Zone ki price har ghante thori badalti hai.</small></li>
-          <li><span>Jab price zone tak ${back} aur 1H candle ${close} band ho</span><small>Yahan "Abhi ${a.side} karein" aa jayega, SL aur TP ke saath, aur phone par alarm bhi bajega. Us se pehle khud entry na lein.</small></li>
+          <li><span>Jab price zone tak ${back} aur ${MODE().tf} candle ${close} band ho</span><small>Yahan "Abhi ${a.side} karein" aa jayega, SL aur TP ke saath, aur phone par alarm bhi bajega. Us se pehle khud entry na lein.</small></li>
         </ol>
         ${settings.mode === 'safe' ? '<p class="act-small">Safe mode mein signal sirf EMA cross par aata hai (bahut kam). Zyada mauqon ke liye Settings → Signal mode → Active.</p>' : ''}`;
       return;
@@ -258,7 +261,7 @@
     if (a.kind === 'wait') {
       box.innerHTML = `<div class="act-head">Abhi koi trade na lagayein</div>
         <p class="act-why">${esc(a.why)}</p>
-        <p class="act-small">Jab 1H aur 4H trend ek taraf honge to yahan agla mauqa aur us ki price dikhegi. Signal banne par phone par alarm bhi aayega.</p>`;
+        <p class="act-small">Jab ${MODE().tf} aur 4H trend ek taraf honge to yahan agla mauqa aur us ki price dikhegi. Signal banne par phone par alarm bhi aayega.</p>`;
       return;
     }
     const t = a.t, side = t.side, plat = PLATFORMS.byId(settings.platform).short;
@@ -325,13 +328,13 @@
     const md = GS.MODES[settings.mode];
     $('verdictCard').className = 'card verdict ' + v;
     // Active on gold is profitable in tests but clearly weaker than Safe, so it is not called "Mazboot".
-    const label = settings.mode === 'active' && v === 'strong' ? 'Theek ✓' : { strong: 'Mazboot ✓', weak: 'Kamzor ⚠', loss: 'Ghaata ✗' }[v];
+    const label = settings.mode === 'scalp' && v === 'strong' ? 'Kamzor ⚠' : settings.mode === 'active' && v === 'strong' ? 'Theek ✓' : { strong: 'Mazboot ✓', weak: 'Kamzor ⚠', loss: 'Ghaata ✗' }[v];
     $('verdictText').textContent = label + ' · ' + inst.id + ' · ' + md.name;
     const pfTxt = btF.profitFactor == null ? '—' : btF.profitFactor === Infinity ? '∞' : fmt(btF.profitFactor);
-    const modeNote = settings.mode === 'active'
-      ? (inst.id === 'XAUUSD' ? ' Active mode: 2.5 saal mein har mahine ~6 signal, profit factor ~1.5, lekin Safe se zyada loss wali trades.'
-        : ' Active mode sirf Gold par test hua hai.')
-      : '';
+    const modeNote = settings.mode === 'safe' ? ''
+      : inst.id !== 'XAUUSD' ? ` ${md.name} mode sirf Gold par test hua hai.`
+      : settings.mode === 'active' ? ' Active mode: 2.5 saal mein har mahine ~6 signal, profit factor ~1.5, lekin Safe se zyada loss wali trades.'
+      : ' Scalp 15m: 2 saal mein har mahine ~19 signal, lekin win sirf ~31% (10 mein se ~7 SL) aur lagatar 12 loss tak aaye. Risk 0.5% ya kam rakhein.';
     $('verdictNote').textContent = MARKETS.TEST_NOTE[v] + modeNote + ` Pichle ${Math.round((candles[lastClosed].t - candles[0].t) / (24 * H))} din: profit factor ${pfTxt}.`;
 
     $('bPeriod').textContent = Math.round((candles[lastClosed].t - candles[0].t) / (24 * H)) + ' din';
@@ -360,7 +363,7 @@
       const label = t.result === 'open' ? (t.tp1Hit ? 'TP1 ho gaya, chal rahi ' : 'Chal rahi ') + (liveR >= 0 ? '+' : '') + fmt(liveR, 1) + 'R'
         : { tp: 'TP2', sl: t.tp1Hit ? 'SL (TP1 ke baad)' : 'SL', time: 'Time' }[t.exit] + ' ' + (t.r > 0 ? '+' : '') + fmt(t.r, 1) + 'R';
       const cls = t.result === 'open' ? 'open' : t.r > 0 ? 'win' : 'loss';
-      return `<li><span><span class="tag ${t.side.toLowerCase()}">${t.side}</span> ${fmtP(t.entry)} · ${fmtTime(t.time + H)}</span><span class="res ${cls}">${label}</span></li>`;
+      return `<li><span><span class="tag ${t.side.toLowerCase()}">${t.side}</span> ${fmtP(t.entry)} · ${fmtTime(t.time + MODE().iv)}</span><span class="res ${cls}">${label}</span></li>`;
     }).join('') : '<li class="muted">Is data mein koi signal nahi bana.</li>';
   }
 
@@ -459,7 +462,7 @@
   }
 
   async function maybeNotify(sig) {
-    const key = 'nt_alert_' + inst.id + (settings.mode === 'active' ? '_active' : ''), id = sig.time + sig.side;
+    const key = 'nt_alert_' + inst.id + (settings.mode === 'safe' ? '' : '_' + settings.mode), id = sig.time + sig.side;
     const prev = store.get(key, null);
     if (prev === String(id)) return;
     store.set(key, id);
@@ -527,6 +530,8 @@
 
   function applyMarketUI() {
     $('marketPill').textContent = inst.id + ' · ' + GS.MODES[settings.mode].name + ' · ' + PLATFORMS.byId(settings.platform).short;
+    $('chartTf').textContent = MODE().tf;
+    $('trendTf').textContent = MODE().tf;
     const topic = MARKETS.topicFor(inst.id, settings.mode);
     $('topic').textContent = topic;
     $('ntfyLink').href = 'https://ntfy.sh/' + topic;
@@ -571,9 +576,12 @@
   $('setMode').value = settings.mode;
   const modeHint = () => {
     const m = GS.MODES[$('setMode').value];
-    $('modeHint').textContent = $('setMode').value === 'active'
-      ? `Har mahine takreeban ${m.perMonth} signal (Gold). Trend mein pullback par bhi entry deta hai. Loss wali trades bhi aati hain (win ~${m.win}%), is liye risk 1% ya kam rakhein.`
-      : `Har mahine takreeban ${m.perMonth} signal (Gold), win ~${m.win}%. Kai hafte signal na aana normal hai. Is ke mobile alert ka topic alag hai (neeche).`;
+    const v = $('setMode').value;
+    $('modeHint').textContent = v === 'active'
+      ? `1H chart. Har mahine takreeban ${m.perMonth} signal (Gold). Trend mein pullback par bhi entry deta hai. Loss wali trades bhi aati hain (win ~${m.win}%), is liye risk 1% ya kam rakhein.`
+      : v === 'scalp'
+        ? `15 minute chart. Har mahine takreeban ${m.perMonth} signal (Gold), lekin 10 mein se ~7 trade SL par band hoti hain (win ~${m.win}%) aur lagatar 10-12 loss bhi aa sakte hain. Munafa kam aur TP wali bari trades se aata hai. Risk 0.5% ya kam. Signal 15-20 minute mein purana ho jata hai. Is ka mobile alert topic alag hai (neeche).`
+        : `1H chart. Har mahine takreeban ${m.perMonth} signal (Gold), win ~${m.win}%. Kai hafte signal na aana normal hai. Is ka mobile alert topic alag hai (neeche).`;
   };
   modeHint();
   $('setMode').addEventListener('change', modeHint);
@@ -606,7 +614,8 @@
     settings.market = $('setMarket').value;
     settings.platform = $('setPlatform').value;
     const changedMode = settings.mode !== $('setMode').value;
-    settings.mode = $('setMode').value === 'active' ? 'active' : 'safe';
+    const changedTf = GS.modeOf(settings.mode).tf !== GS.modeOf($('setMode').value).tf;
+    settings.mode = ['safe', 'scalp'].includes($('setMode').value) ? $('setMode').value : 'active';
     settings.balance = b > 0 ? b : 1000;
     settings.risk = r > 0 && r <= 5 ? r : 1;
     settings.contract = parseFloat(c) > 0 ? c : '';
@@ -616,7 +625,7 @@
     store.set('nt_contract', settings.contract); store.set('nt_key', settings.key); store.set('nt_filter', settings.filter ? '1' : '0'); store.set('nt_platform', settings.platform); store.set('nt_mode', settings.mode);
     $('setBalance').value = settings.balance; $('setRisk').value = settings.risk; $('setContract').value = settings.contract;
     inst = MARKETS.byId(settings.market);
-    if (changedMarket) { clearView('Loading…'); lastData = null; }
+    if (changedMarket || changedTf) { clearView('Loading…'); lastData = null; } // different candles needed
     else if (lastData) render(lastData.candles, lastData.source, lastData.offset); // platform/risk change shows instantly
     applyMarketUI();
     toast('Save ho gaya' + (changedMarket ? ': ab ' + inst.id + ' ke signal' : changedMode ? ': ' + GS.MODES[settings.mode].name + ' mode' : ''));

@@ -77,9 +77,9 @@
     return out;
   }
 
-  // 4H EMA50 trend built from 1H candles. At 1H index i only 4H bars that have fully closed are used,
-  // so the value never changes after the fact (no repaint).
-  function htfTrend(candles) {
+  // 4H EMA50 trend built from 1H (or 15m) candles. At index i only 4H bars that have fully closed are used,
+  // so the value never changes after the fact (no repaint). iv = candle length in ms.
+  function htfTrend(candles, iv = HOUR) {
     const bars = [];
     for (const c of candles) {
       const b = Math.floor(c.t / H4);
@@ -90,18 +90,18 @@
     const out = new Array(candles.length).fill(null);
     let k = -1;
     for (let i = 0; i < candles.length; i++) {
-      const closedAt = candles[i].t + HOUR;
+      const closedAt = candles[i].t + iv;
       while (k + 1 < bars.length && (bars[k + 1].b + 1) * H4 <= closedAt) k++;
       if (k >= 0 && e[k] != null) out[i] = bars[k].c > e[k] ? 'up' : 'down';
     }
     return out;
   }
 
-  function computeAll(candles) {
+  function computeAll(candles, iv = HOUR) {
     const closes = candles.map(c => c.c);
     return {
       e9: ema(closes, 9), e21: ema(closes, 21), e50: ema(closes, 50), e200: ema(closes, 200),
-      rsi: rsi(closes, 14), atr: atr(candles, 14), htf: htfTrend(candles),
+      rsi: rsi(closes, 14), atr: atr(candles, 14), htf: htfTrend(candles, iv),
     };
   }
 
@@ -133,10 +133,14 @@
   // Tested on 2.5y PAXG + 2.4y gold futures, $0.50 cost (Nov 2026):
   //          safe   PF 2.27 / 2.47, max drawdown 4R,  win ~48%
   //          active PF 1.61 / 1.38, max drawdown 14R, win ~39%, both halves of the data profitable
+  //  scalp:  Active rules on 15-minute candles (4H trend filter, 72h max hold). ~19 a month on gold,
+  //          but win ~31%, PF 1.27, up to 12 losses in a row (2y PAXG 15m, $0.50 cost, Nov 2026).
   const MODES = {
-    safe: { name: 'Safe', perMonth: 2, pf: '2.3', dd: 4, win: 48 },
-    active: { name: 'Active', perMonth: 6, pf: '1.5', dd: 14, win: 39 },
+    safe: { name: 'Safe', tf: '1H', iv: HOUR, pullback: false, perMonth: 2, pf: '2.3', dd: 4, win: 48 },
+    active: { name: 'Active', tf: '1H', iv: HOUR, pullback: true, perMonth: 6, pf: '1.5', dd: 14, win: 39 },
+    scalp: { name: 'Scalp 15m', tf: '15m', iv: HOUR / 4, pullback: true, perMonth: 19, pf: '1.27', dd: 15, win: 31 },
   };
+  const modeOf = mode => MODES[mode] || MODES.safe;
 
   function pullbackAt(ind, candles, i, dir) {
     const { e9, e21 } = ind, p = candles[i - 1], k = candles[i];
@@ -152,7 +156,7 @@
     const trend = trendAt(ind, candles, i);
     const crossUp = e9[i - 1] <= e21[i - 1] && e9[i] > e21[i];
     const crossDn = e9[i - 1] >= e21[i - 1] && e9[i] < e21[i];
-    const active = mode === 'active';
+    const active = modeOf(mode).pullback;
     const up = crossUp || (active && trend === 'up' && pullbackAt(ind, candles, i, 1));
     const dn = crossDn || (active && trend === 'down' && pullbackAt(ind, candles, i, -1));
     let side = null, kind = null;
@@ -165,6 +169,7 @@
     const checks = filterChecks(ind, candles, i, side);
     return {
       index: i, time: candles[i].t, side, kind, entry, atr: a[i],
+      maxHold: Math.round(CONFIG.MAX_HOLD * HOUR / modeOf(mode).iv), // 72 hours in candles
       sl: entry - dir * dist,
       tp1: entry + dir * dist * CONFIG.TP1_R,
       tp2: entry + dir * dist * CONFIG.TARGET_R,
@@ -187,7 +192,7 @@
       if (dir === 1 ? c.l <= sig.sl : c.h >= sig.sl) return { result: 'loss', r: -1, exitIndex: j, exit: 'sl', tp1Hit };
       if (dir === 1 ? c.h >= sig.tp2 : c.l <= sig.tp2) return { result: 'win', r: CONFIG.TARGET_R, exitIndex: j, exit: 'tp', tp1Hit: true };
       if (dir === 1 ? c.h >= sig.tp1 : c.l <= sig.tp1) tp1Hit = true;
-      if (j - sig.index >= CONFIG.MAX_HOLD) {
+      if (j - sig.index >= (sig.maxHold || CONFIG.MAX_HOLD)) {
         const r = rOf(c.c);
         return { result: r >= 0 ? 'win' : 'loss', r, exitIndex: j, exit: 'time', tp1Hit };
       }
@@ -246,7 +251,7 @@
   }
 
   const api = {
-    CONFIG, MODES, HOUR, isMarketClosed, marketCandles, ema, rsi, atr, htfTrend, computeAll, trendAt,
+    CONFIG, MODES, modeOf, HOUR, isMarketClosed, marketCandles, ema, rsi, atr, htfTrend, computeAll, trendAt,
     filterChecks, pullbackAt, signalAt, resolve, backtest, lotSize, shiftCandles,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
