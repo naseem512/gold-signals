@@ -2,10 +2,10 @@
   "heartbeat": "2026-11-07T01:50:11.125Z",
   "markets": {
     "BTCUSD": {
-      "announced": 1794279600000,
+      "announced": 1794999600000,
       "closed": 1794279600000,
       "init": true,
-      "lastSignal": 1794279600000,
+      "lastSignal": 1794999600000,
       "tp1": 1794279600000
     },
     "BTCUSD-active": {
