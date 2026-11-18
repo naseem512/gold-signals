@@ -6,10 +6,11 @@
       "closed": 1794279600000,
       "init": true,
       "lastSignal": 1794999600000,
-      "tp1": 1794279600000
+      "tp1": 1794999600000
     },
     "BTCUSD-active": {
       "announced": 1794751200000,
+      "closed": 1794751200000,
       "init": true,
       "lastSignal": 1794751200000
     },
