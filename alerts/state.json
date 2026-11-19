@@ -22,8 +22,9 @@
       "tp1": 1794063600000
     },
     "ETHUSD-active": {
+      "announced": 1795053600000,
       "init": true,
-      "lastSignal": 1794715200000
+      "lastSignal": 1795053600000
     },
     "EURUSD": {},
     "EURUSD-active": {},
@@ -45,7 +46,7 @@
     },
     "XAUUSD-scalp": {
       "announced": 1794996000000,
-      "closed": 1794938400000,
+      "closed": 1794996000000,
       "init": true,
       "lastSignal": 1794996000000,
       "tp1": 1794996000000
