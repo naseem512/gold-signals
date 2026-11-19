@@ -23,6 +23,7 @@
     },
     "ETHUSD-active": {
       "announced": 1795053600000,
+      "closed": 1795053600000,
       "init": true,
       "lastSignal": 1795053600000
     },
@@ -49,7 +50,7 @@
       "closed": 1794996000000,
       "init": true,
       "lastSignal": 1795079700000,
-      "tp1": 1794996000000
+      "tp1": 1795079700000
     }
   }
 }
