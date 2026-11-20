@@ -17,6 +17,7 @@
     RSI_SELL: [30, 50],
     BODY_MIN: 0.5,   // signal candle body must be > 50% of its range
     EXT_MAX_ATR: 1,  // close must be within 1 ATR of EMA21
+    BREAKOUT_BARS: 40, // Active breakout: close beyond the high/low of the last 40 candles
   };
 
   // Spot gold (and MT5) is closed from Friday ~21:00 UTC to Sunday ~22:00 UTC.
@@ -133,11 +134,13 @@
   // Tested on 2.5y PAXG + 2.4y gold futures, $0.50 cost (Nov 2026):
   //          safe   PF 2.27 / 2.47, max drawdown 4R,  win ~48%
   //          active PF 1.61 / 1.38, max drawdown 14R, win ~39%, both halves of the data profitable
+  //   + breakout (Nov 2026, after a $290 crash with no Active entry): 8.1 / 7.6 a month,
+  //          PF 1.47 / 1.30, total R 69 / 43 (was 63 / 35), weeks without a signal 1 of 26 (was 5)
   //  scalp:  Active rules on 15-minute candles (4H trend filter, 72h max hold). ~19 a month on gold,
   //          but win ~31%, PF 1.27, up to 12 losses in a row (2y PAXG 15m, $0.50 cost, Nov 2026).
   const MODES = {
     safe: { name: 'Safe', tf: '1H', iv: HOUR, pullback: false, perMonth: 2, pf: '2.3', dd: 4, win: 48 },
-    active: { name: 'Active', tf: '1H', iv: HOUR, pullback: true, perMonth: 6, pf: '1.5', dd: 14, win: 39 },
+    active: { name: 'Active', tf: '1H', iv: HOUR, pullback: true, breakout: true, perMonth: 8, pf: '1.4', dd: 13, win: 38 },
     scalp: { name: 'Scalp 15m', tf: '15m', iv: HOUR / 4, pullback: true, perMonth: 19, pf: '1.27', dd: 15, win: 31 },
   };
   const modeOf = mode => MODES[mode] || MODES.safe;
@@ -148,8 +151,20 @@
     return e9[i] < e21[i] && Math.max(p.h, k.h) >= e21[i] && k.c < e21[i] && k.c < k.o && k.c < Math.min(p.c, p.o);
   }
 
-  // Signal on the CLOSE of candle i (i must be a closed candle).
-  function signalAt(ind, candles, i, mode = 'safe') {
+  function makeSig(ind, candles, i, mode, side, kind, checks) {
+    const entry = candles[i].c, dist = ind.atr[i] * CONFIG.SL_ATR, dir = side === 'BUY' ? 1 : -1;
+    return {
+      index: i, time: candles[i].t, side, kind, entry, atr: ind.atr[i],
+      maxHold: Math.round(CONFIG.MAX_HOLD * HOUR / modeOf(mode).iv), // 72 hours in candles
+      sl: entry - dir * dist,
+      tp1: entry + dir * dist * CONFIG.TP1_R,
+      tp2: entry + dir * dist * CONFIG.TARGET_R,
+      slDist: dist, checks, passed: checks.every(x => x.ok),
+    };
+  }
+
+  // Cross (all modes) or pullback (Active/Scalp) entry on the CLOSE of candle i.
+  function baseSignal(ind, candles, i, mode) {
     if (i < 1) return null;
     const { e9, e21, rsi: r, atr: a } = ind;
     if ([e9[i - 1], e21[i - 1], e9[i], e21[i], r[i], a[i]].some(v => v == null)) return null;
@@ -163,18 +178,33 @@
     if (trend === 'up' && up && r[i] > CONFIG.RSI_BUY[0] && r[i] < CONFIG.RSI_BUY[1]) { side = 'BUY'; kind = crossUp ? 'cross' : 'pullback'; }
     if (trend === 'down' && dn && r[i] < CONFIG.RSI_SELL[1] && r[i] > CONFIG.RSI_SELL[0]) { side = 'SELL'; kind = crossDn ? 'cross' : 'pullback'; }
     if (!side) return null;
-    const entry = candles[i].c;
-    const dist = a[i] * CONFIG.SL_ATR;
-    const dir = side === 'BUY' ? 1 : -1;
-    const checks = filterChecks(ind, candles, i, side);
-    return {
-      index: i, time: candles[i].t, side, kind, entry, atr: a[i],
-      maxHold: Math.round(CONFIG.MAX_HOLD * HOUR / modeOf(mode).iv), // 72 hours in candles
-      sl: entry - dir * dist,
-      tp1: entry + dir * dist * CONFIG.TP1_R,
-      tp2: entry + dir * dist * CONFIG.TARGET_R,
-      slDist: dist, checks, passed: checks.every(x => x.ok),
-    };
+    return makeSig(ind, candles, i, mode, side, kind, filterChecks(ind, candles, i, side));
+  }
+
+  // Breakout (Active only): in a running trend that never pulls back to EMA21 (a strong rally or crash),
+  // enter when a strong candle closes beyond the last 40 candles' high/low. No RSI band and no
+  // distance-to-EMA21 limit, because both block exactly these moves. 4H trend and body filters still apply.
+  function breakoutAt(ind, candles, i, mode) {
+    const n = CONFIG.BREAKOUT_BARS;
+    if (i < n || ind.atr[i] == null) return null;
+    const trend = trendAt(ind, candles, i), dir = trend === 'up' ? 1 : trend === 'down' ? -1 : 0;
+    if (!dir) return null;
+    const side = dir > 0 ? 'BUY' : 'SELL';
+    const checks = filterChecks(ind, candles, i, side).filter(c => c.key !== 'ext');
+    if (!checks.every(c => c.ok)) return null;
+    let ext = -Infinity;
+    for (let j = i - n; j < i; j++) ext = Math.max(ext, dir > 0 ? candles[j].h : -candles[j].l);
+    if (!((dir > 0 ? candles[i].c : -candles[i].c) > ext)) return null;
+    checks.push({ key: 'breakout', label: `Price ne pichle ${n} candles ka ${dir > 0 ? 'high' : 'low'} toda`, ok: true });
+    return makeSig(ind, candles, i, mode, side, 'breakout', checks);
+  }
+
+  // Signal on the CLOSE of candle i (i must be a closed candle).
+  // opts.breakout = false turns the breakout entry off (it only helped on gold; other markets got worse).
+  function signalAt(ind, candles, i, mode = 'safe', opts = {}) {
+    const base = baseSignal(ind, candles, i, mode);
+    if (!modeOf(mode).breakout || opts.breakout === false || (base && base.passed)) return base;
+    return breakoutAt(ind, candles, i, mode) || base;
   }
 
   // Walk forward from the signal candle.
@@ -201,11 +231,11 @@
   }
 
   // cost = spread + slippage per trade in price units (differs per market).
-  function backtest(candles, ind, lastClosed, useFilters = true, cost = CONFIG.COST_USD, mode = 'safe') {
+  function backtest(candles, ind, lastClosed, useFilters = true, cost = CONFIG.COST_USD, mode = 'safe', opts = {}) {
     const trades = [], rejected = [];
     let i = 1;
     while (i <= lastClosed) {
-      const sig = signalAt(ind, candles, i, mode);
+      const sig = signalAt(ind, candles, i, mode, opts);
       if (sig && useFilters && !sig.passed) { rejected.push(sig); i++; continue; }
       if (sig) {
         const res = resolve(sig, candles, lastClosed);
@@ -252,7 +282,7 @@
 
   const api = {
     CONFIG, MODES, modeOf, HOUR, isMarketClosed, marketCandles, ema, rsi, atr, htfTrend, computeAll, trendAt,
-    filterChecks, pullbackAt, signalAt, resolve, backtest, lotSize, shiftCandles,
+    filterChecks, pullbackAt, breakoutAt, signalAt, resolve, backtest, lotSize, shiftCandles,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GS = api;

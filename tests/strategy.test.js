@@ -275,8 +275,13 @@ test('Active mode keeps every Safe signal and adds pullback entries', () => {
   let safe = 0, extra = 0;
   for (let i = 1; i < m.length - 1; i++) {
     const s = GS.signalAt(ind, m, i, 'safe'), a = GS.signalAt(ind, m, i, 'active');
-    if (s) { safe++; assert.ok(a && a.side === s.side && a.kind === 'cross', 'active lost a safe signal at ' + i); }
-    if (a && !s) { extra++; assert.equal(a.kind, 'pullback'); }
+    if (s) {
+      safe++;
+      // a filtered-out cross may be replaced by a breakout that passes; a passing cross is always kept
+      if (s.passed) assert.ok(a && a.side === s.side && a.kind === 'cross', 'active lost a safe signal at ' + i);
+      else assert.ok(a && (a.kind === 'cross' || (a.kind === 'breakout' && a.passed)), 'unexpected at ' + i);
+    }
+    if (a && !s) { extra++; assert.ok(['pullback', 'breakout'].includes(a.kind), a.kind); }
   }
   assert.ok(safe > 0 && extra > safe, `safe ${safe}, extra ${extra}`);
   const bs = GS.backtest(m, ind, m.length - 2, true, 0.5, 'safe'), ba = GS.backtest(m, ind, m.length - 2, true, 0.5, 'active');
@@ -410,4 +415,29 @@ test('Only markets graded ok/strong get a pick, and grades exist for safe and ac
   assert.equal(M.byId('USDJPY').pick, undefined);
   assert.equal(M.grade(M.byId('BTCUSD'), 'scalp'), 'untested');
   assert.equal(M.ALL_TOPIC, 'naseem-trader-8cb48b4cb5-all');
+});
+
+// ---------- Active breakout (gold only) ----------
+test('Active breakout: close beyond the 40-candle extreme in the trend, filters except RSI/EMA21 distance', () => {
+  const m = GS.marketCandles(fixture), ind = GS.computeAll(m);
+  let n = 0;
+  for (let i = 300; i < m.length - 1; i++) {
+    const s = GS.signalAt(ind, m, i, 'active');
+    if (!s || s.kind !== 'breakout') continue;
+    n++;
+    const dir = s.side === 'BUY' ? 1 : -1;
+    const prev = m.slice(i - 40, i).map(c => dir > 0 ? c.h : c.l);
+    assert.ok(dir > 0 ? m[i].c > Math.max(...prev) : m[i].c < Math.min(...prev), 'not a breakout at ' + i);
+    assert.equal(GS.trendAt(ind, m, i), dir > 0 ? 'up' : 'down');
+    assert.equal(ind.htf[i], dir > 0 ? 'up' : 'down');
+    assert.ok(s.passed);
+    // with breakout switched off this candle gives no tradable signal
+    const off = GS.signalAt(ind, m, i, 'active', { breakout: false });
+    assert.ok(!off || !off.passed);
+  }
+  assert.ok(n > 0, 'fixture should contain breakout signals');
+  assert.equal(M.optsFor(M.byId('XAUUSD')).breakout, true);
+  assert.equal(M.optsFor(M.byId('BTCUSD')).breakout, false);
+  // Safe and Scalp never use breakout
+  for (let i = 300; i < m.length - 1; i += 3) { const s = GS.signalAt(ind, m, i, 'safe'); assert.ok(!s || s.kind === 'cross'); }
 });

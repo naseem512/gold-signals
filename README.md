@@ -45,6 +45,16 @@ Binance is also the default **price source** for gold (PAXG). This is only the p
 ## Spot gold calibration
 PAXG trades a few dollars away from spot gold (about $11 below spot in Nov 2026), and MT5 brokers quote spot. On each refresh the app and the alert job read a free spot quote (`api.gold-api.com/price/XAU`, no key) and shift the PAXG candles by the gap. Signals do not change, because EMA crosses, RSI, ATR and the filters are unaffected by a constant shift (a test checks this); only the price levels move onto spot. A quote that is stale (over 20 minutes old, e.g. at the weekend) or more than 3% away is ignored. The app then uses the last good gap for up to 3 days, or else shows the raw PAXG price with a warning. Binance platforms always see raw PAXG.
 
+## Gold Active breakout (v2.9)
+In Nov 2026 gold fell about $290 in a week without one pullback to EMA21, and Active gave no entry. Gold Active now also enters on a **breakout**: in the trend, with the 4H trend agreeing and a strong candle body, a close beyond the last 40 candles' high or low. The RSI band and the EMA21-distance filter do not apply, because those are exactly what blocked the move.
+
+| Gold Active, 2.5y PAXG / 2.4y GC | Trades/month | PF | Total R | Weeks with no signal (last 26) |
+|---|---|---|---|---|
+| Before | 5.8 / 5.1 | 1.61 / 1.38 | 63 / 35 | 5 |
+| With breakout | 8.1 / 7.6 | 1.47 / 1.30 | 69 / 43 | 1 |
+
+November 2026 with breakout: 7 trades, 4 TP and 3 SL, +8.9R. Breakout made the other markets worse (BTC PF 1.14, silver's first half losing), so it is on for gold only (`breakout: true` in `instruments.js`). The market plan shows both levels: the EMA21 zone and the breakout level.
+
 ## More markets (scanner + combined alerts)
 Every market was backtested in both modes on 2+ years of hourly data. Each market is graded per mode: strong, ok, weak or loss. Only gold is strong, and only in Safe mode. The markets graded ok are gold (Active), BTC (Active), ETH (Safe), silver (Active, needs a key) and GBPUSD (Safe, needs a key). USDJPY, AUDUSD, EURUSD (Active), GBPJPY and oil were weak or losing.
 

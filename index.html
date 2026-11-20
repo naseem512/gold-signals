@@ -9,12 +9,12 @@
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Naseem Trader</title>
-  <link rel="stylesheet" href="style.css?v=12">
+  <link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
   <header class="top">
     <div class="brand">
-      <img src="icons/icon-192.png?v=12" alt="" width="34" height="34">
+      <img src="icons/icon-192.png?v=13" alt="" width="34" height="34">
       <div>
         <h1>Naseem Trader</h1>
         <button class="market-pill" id="marketPill" type="button">XAUUSD · 1H</button>
@@ -131,6 +131,7 @@
           <li><b>BUY:</b> EMA50 &gt; EMA200 aur price EMA200 se upar, EMA9 EMA21 ko neeche se cross kare, RSI 50–70.</li>
           <li><b>SELL:</b> EMA50 &lt; EMA200 aur price EMA200 se neeche, EMA9 EMA21 ko upar se cross kare, RSI 30–50.</li>
           <li><b>Active mode mein ye bhi:</b> trend chal raha ho, price wapas EMA21 tak aaye aur candle trend ki taraf band ho (pullback entry).</li>
+          <li><b>Gold Active mein breakout bhi:</b> tez trend (jahan price EMA21 tak wapas nahi aati) mein mazboot candle pichle 40 candles ka high/low tod kar band ho.</li>
           <li><b>Fake-signal filter:</b> 4H trend same taraf, signal candle mazboot (body &gt; 50%), price EMA21 se 1 ATR ke andar.</li>
           <li>Signal sirf <b>band ho chuki</b> candle par banta hai (Safe/Active: 1H, Scalp: 15m), baad mein badalta nahi.</li>
           <li><b>Scalp 15m:</b> Active wale rules 15 minute candles par, 4H trend filter ke saath.</li>
@@ -206,7 +207,7 @@
         <p class="fine" id="notifyState"></p>
       </div>
 
-      <p class="version">Naseem Trader v2.8</p>
+      <p class="version">Naseem Trader v2.9</p>
     </section>
   </main>
 
@@ -218,9 +219,9 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="instruments.js?v=12"></script>
-  <script src="indicators.js?v=12"></script>
-  <script src="platforms.js?v=12"></script>
-  <script src="app.js?v=12"></script>
+  <script src="instruments.js?v=13"></script>
+  <script src="indicators.js?v=13"></script>
+  <script src="platforms.js?v=13"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   const INSTRUMENTS = [
     { id: 'XAUUSD', name: 'Gold', digits: 2, cost: 0.5, contract: 100, usdPerPoint: () => 100,
       binance: 'PAXGUSDT', spot: 'XAU', td: 'XAU/USD', closesWeekend: true, tested: 'strong',
-      modes: { safe: 'strong', active: 'ok', scalp: 'weak' }, pick: 'active' },
+      modes: { safe: 'strong', active: 'ok', scalp: 'weak' }, pick: 'active', breakout: true },
     { id: 'XAGUSD', name: 'Silver', digits: 3, cost: 0.03, contract: 5000, usdPerPoint: () => 5000,
       td: 'XAG/USD', closesWeekend: true, tested: 'weak', modes: { safe: 'weak', active: 'ok' }, pick: 'active' },
     { id: 'EURUSD', name: 'Euro / Dollar', digits: 5, cost: 0.00012, contract: 100000, usdPerPoint: () => 100000,
@@ -36,6 +36,8 @@
   // ntfy topic per market: <NTFY_BASE>-<id lowercase>. The random part keeps strangers from guessing it.
   const NTFY_BASE = 'naseem-trader-8cb48b4cb5';
   // Active (the default mode) uses the main topic people already subscribed to; Safe has its own.
+  // Active breakout entries are used only where they tested better (gold). Pass to GS.backtest/signalAt.
+  const optsFor = inst => ({ breakout: !!inst.breakout });
   const grade = (inst, mode) => (inst.modes && inst.modes[mode]) || 'untested';
   const GRADE_LABEL = { strong: 'Mazboot ✓', ok: 'Theek ✓', weak: 'Kamzor ⚠', loss: 'Ghaata ✗', untested: 'Test nahi hua' };
   // One topic with the signals of every market's picked mode (only markets graded ok/strong get a pick).
@@ -56,7 +58,7 @@
     return price - feedPrice;
   }
 
-  const api = { INSTRUMENTS, TEST_NOTE, APP_URL, NTFY_BASE, topicFor, byId, grade, GRADE_LABEL, ALL_TOPIC, SPOT_URL, spotOffset };
+  const api = { INSTRUMENTS, TEST_NOTE, APP_URL, NTFY_BASE, topicFor, byId, optsFor, grade, GRADE_LABEL, ALL_TOPIC, SPOT_URL, spotOffset };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MARKETS = api;
 })(this);

@@ -112,7 +112,7 @@
     if (m.closesWeekend && GS.isMarketClosed(now)) return { cls: 'muted', text: 'Market band' };
     const lc = candles[last].t + md.iv > now ? last - 1 : last;
     const ind = GS.computeAll(candles, md.iv);
-    const bt = GS.backtest(candles, ind, lc, true, m.cost, mode);
+    const bt = GS.backtest(candles, ind, lc, true, m.cost, mode, MARKETS.optsFor(m));
     const t = bt.trades[bt.trades.length - 1], price = candles[last].c;
     if (t && t.result === 'open') {
       const dir = t.side === 'BUY' ? 1 : -1, r = (price - t.entry) * dir / t.slDist;
@@ -158,8 +158,8 @@
     const IV = MODE().iv;
     const lastClosed = candles[last].t + IV > now ? last - 1 : last;
     const ind = GS.computeAll(candles, IV);
-    const btF = GS.backtest(candles, ind, lastClosed, true, inst.cost, settings.mode);
-    const btN = GS.backtest(candles, ind, lastClosed, false, inst.cost, settings.mode);
+    const btF = GS.backtest(candles, ind, lastClosed, true, inst.cost, settings.mode, MARKETS.optsFor(inst));
+    const btN = GS.backtest(candles, ind, lastClosed, false, inst.cost, settings.mode, MARKETS.optsFor(inst));
     const bt = settings.filter ? btF : btN;
     const price = candles[last].c;
     lastView = { candles, ind, bt, lastClosed };
@@ -214,7 +214,7 @@
       $('signalChip').textContent = 'Koi trade nahi';
       $('tradeBox').hidden = true;
       $('mt5Card').hidden = true;
-      const raw = GS.signalAt(ind, candles, lastClosed, settings.mode);
+      const raw = GS.signalAt(ind, candles, lastClosed, settings.mode, MARKETS.optsFor(inst));
       const rejected = raw && settings.filter && !raw.passed;
       renderAction(marketPlan(ind, candles, lastClosed, price, trend, rejected ? raw : null));
       if (rejected) {
@@ -235,7 +235,7 @@
     card.classList.add(active.side.toLowerCase());
     $('signalText').textContent = active.side;
     $('signalChip').textContent = isNew ? 'NAYA SIGNAL' : active.tp1Hit ? 'TP1 HIT' : 'TRADE CHAL RAHI';
-    $('signalNote').textContent = 'Signal: ' + fmtTime(active.time + MODE().iv) + ` (${MODE().tf} candle close)` + (active.kind === 'pullback' ? ' · Pullback entry' : '');
+    $('signalNote').textContent = 'Signal: ' + fmtTime(active.time + MODE().iv) + ` (${MODE().tf} candle close)` + (active.kind === 'pullback' ? ' · Pullback entry' : active.kind === 'breakout' ? ' · Breakout entry' : '');
 
     const order = PLATFORMS.orderFor(settings.platform, inst, active, {
       balance: settings.balance, riskPct: settings.risk, usdPerPoint: usdPerPoint(price), price,
@@ -286,7 +286,13 @@
     const where = gap > 0.15 * a
       ? `Price abhi zone se ${fmtP(gap)} ${dir > 0 ? 'upar' : 'neeche'} hai.`
       : `Price abhi zone ke qareeb hai. Agli ${MODE().tf} candle par signal ban sakta hai.`;
-    return { kind: 'plan', dir, side, zone, rej, where,
+    // Gold Active also enters on a breakout: next candle closing beyond the last 40 candles' low/high.
+    let bo = null;
+    if (GS.modeOf(settings.mode).breakout && MARKETS.optsFor(inst).breakout && i >= GS.CONFIG.BREAKOUT_BARS) {
+      const win = candles.slice(i - GS.CONFIG.BREAKOUT_BARS + 1, i + 1);
+      bo = dir > 0 ? Math.max(...win.map(c => c.h)) : Math.min(...win.map(c => c.l));
+    }
+    return { kind: 'plan', dir, side, zone, rej, where, bo,
       why: `${inst.name} ${dir > 0 ? 'upar' : 'neeche'} ja raha hai (${MODE().tf} aur 4H dono trend ${dir > 0 ? 'upar' : 'neeche'}). Ab ${side} ka mauqa dhoonda ja raha hai.` };
   }
 
@@ -300,7 +306,8 @@
         <p class="act-why">${esc(a.rej + a.why)}</p>
         <ol class="act-steps">
           <li><span>${a.side} zone (EMA21)</span><b class="act-val" id="acZone">${fmtP(a.zone)}</b><button class="copy" data-copy="acZone" type="button">Copy</button><small>${esc(a.where)}</small></li>
-          <li><span>MT5 mein is price par alert lagayein</span><small>Chart par right click → Alert / Trade → Alert, ya mobile mein Quotes → symbol → Alert. Zone ki price har ghante thori badalti hai.</small></li>
+          ${a.bo != null ? `<li><span>Ya breakout level</span><b class="act-val" id="acBo">${fmtP(a.bo)}</b><button class="copy" data-copy="acBo" type="button">Copy</button><small>Tez trend mein price zone tak wapas nahi aati. Agar ${MODE().tf} candle ${a.dir > 0 ? 'is se upar' : 'is se neeche'} mazboot band ho to bhi ${a.side} signal banega.</small></li>` : ''}
+          <li><span>MT5 mein in prices par alert lagayein</span><small>Chart par right click → Alert / Trade → Alert, ya mobile mein Quotes → symbol → Alert. Zone ki price har ghante thori badalti hai.</small></li>
           <li><span>Jab price zone tak ${back} aur ${MODE().tf} candle ${close} band ho</span><small>Yahan "Abhi ${a.side} karein" aa jayega, SL aur TP ke saath, aur phone par alarm bhi bajega. Us se pehle khud entry na lein.</small></li>
         </ol>
         ${settings.mode === 'safe' ? '<p class="act-small">Safe mode mein signal sirf EMA cross par aata hai (bahut kam). Zyada mauqon ke liye Settings → Signal mode → Active.</p>' : ''}`;
