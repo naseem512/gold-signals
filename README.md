@@ -45,6 +45,20 @@ Binance is also the default **price source** for gold (PAXG). This is only the p
 ## Spot gold calibration
 PAXG trades a few dollars away from spot gold (about $11 below spot in Nov 2026), and MT5 brokers quote spot. On each refresh the app and the alert job read a free spot quote (`api.gold-api.com/price/XAU`, no key) and shift the PAXG candles by the gap. Signals do not change, because EMA crosses, RSI, ATR and the filters are unaffected by a constant shift (a test checks this); only the price levels move onto spot. A quote that is stale (over 20 minutes old, e.g. at the weekend) or more than 3% away is ignored. The app then uses the last good gap for up to 3 days, or else shows the raw PAXG price with a warning. Binance platforms always see raw PAXG.
 
+## Trend trade: always-on "trade now" (v3.0, gold 1H)
+When no signal can be entered, the Signal card can still offer a trade at the current price. It does this when the 1H and 4H trends agree and price is on the trend side of EMA21. The card shows SELL/BUY at the live price, with SL 2.5×ATR, TP1 1R, TP2 3R, the lot size and the MT5 order, labelled **TREND TRADE**.
+
+This was tested by entering at **every** qualifying hour on 2.5y PAXG / 2.4y GC:
+
+| Result | PAXG | GC |
+|---|---|---|
+| Profit factor | 1.48 | 1.38 |
+| First half / second half | 1.30 / 1.65 | 1.27 / 1.49 |
+| Win rate | ~38% | ~37% |
+| Time available | ~57% | ~56% |
+
+Entries with price on the wrong side of EMA21 were not profitable in the first half, so they are excluded. The rule is `GS.trendTradeDir`. It sends no alerts; strategy signals still take priority while they can be entered.
+
 ## Gold Active breakout (v2.9)
 In Nov 2026 gold fell about $290 in a week without one pullback to EMA21, and Active gave no entry. Gold Active now also enters on a **breakout**: in the trend, with the 4H trend agreeing and a strong candle body, a close beyond the last 40 candles' high or low. The RSI band and the EMA21-distance filter do not apply, because those are exactly what blocked the move.
 

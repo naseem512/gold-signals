@@ -441,3 +441,22 @@ test('Active breakout: close beyond the 40-candle extreme in the trend, filters 
   // Safe and Scalp never use breakout
   for (let i = 300; i < m.length - 1; i += 3) { const s = GS.signalAt(ind, m, i, 'safe'); assert.ok(!s || s.kind === 'cross'); }
 });
+
+// ---------- trend trade (always-on, gold 1H) ----------
+test('Trend trade direction: needs 1H and 4H trend agreement and price on the trend side of EMA21', () => {
+  const m = GS.marketCandles(fixture), ind = GS.computeAll(m);
+  let n = 0;
+  for (let i = 300; i < m.length; i++) {
+    const p = m[i].c, d = GS.trendTradeDir(ind, m, i, p), tr = GS.trendAt(ind, m, i);
+    if (d) {
+      n++;
+      assert.equal(tr, d > 0 ? 'up' : 'down');
+      assert.equal(ind.htf[i], d > 0 ? 'up' : 'down');
+      assert.ok((p - ind.e21[i]) * d >= 0);
+      assert.equal(GS.trendTradeDir(ind, m, i, ind.e21[i] - d * ind.atr[i]), 0); // wrong side of EMA21
+    } else if ((tr === 'up' && ind.htf[i] === 'up') || (tr === 'down' && ind.htf[i] === 'down')) {
+      assert.ok((p - ind.e21[i]) * (tr === 'up' ? 1 : -1) < 0);
+    }
+  }
+  assert.ok(n > 200);
+});

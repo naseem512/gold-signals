@@ -199,6 +199,15 @@
     return makeSig(ind, candles, i, mode, side, 'breakout', checks);
   }
 
+  // Trend trade (any time, gold 1H): +1 / -1 when the trend of candle i and the 4H trend agree and `price`
+  // is on the trend side of EMA21, else 0. Entering then at market (SL 2.5 ATR, TP 3R) tested
+  // PF 1.48 / 1.38 on 2.5y PAXG / 2.4y GC (win ~38%); the wrong side of EMA21 was not profitable.
+  function trendTradeDir(ind, candles, i, price) {
+    const tr = trendAt(ind, candles, i), htf = ind.htf[i];
+    const dir = tr === 'up' && htf === 'up' ? 1 : tr === 'down' && htf === 'down' ? -1 : 0;
+    return dir && (price - ind.e21[i]) * dir >= 0 ? dir : 0;
+  }
+
   // Signal on the CLOSE of candle i (i must be a closed candle).
   // opts.breakout = false turns the breakout entry off (it only helped on gold; other markets got worse).
   function signalAt(ind, candles, i, mode = 'safe', opts = {}) {
@@ -282,7 +291,7 @@
 
   const api = {
     CONFIG, MODES, modeOf, HOUR, isMarketClosed, marketCandles, ema, rsi, atr, htfTrend, computeAll, trendAt,
-    filterChecks, pullbackAt, breakoutAt, signalAt, resolve, backtest, lotSize, shiftCandles,
+    filterChecks, pullbackAt, breakoutAt, trendTradeDir, signalAt, resolve, backtest, lotSize, shiftCandles,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GS = api;

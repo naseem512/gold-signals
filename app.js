@@ -209,6 +209,8 @@
     const active = lastTrade && lastTrade.result === 'open' ? lastTrade : null;
 
     if (!active) {
+      const tt = trendTrade(ind, lastClosed, price, trend);
+      if (tt) { showTrade(tt, lastClosed, price, true); return; }
       card.classList.add('wait');
       $('signalText').textContent = 'WAIT';
       $('signalChip').textContent = 'Koi trade nahi';
@@ -230,12 +232,23 @@
     }
 
     const dir = active.side === 'BUY' ? 1 : -1;
+    const progR = (price - active.entry) * dir / active.slDist;
+    const tt = trendTrade(ind, lastClosed, price, trend);
+    // A running signal that can no longer be entered gives way to the always-on trend trade.
+    if (tt && lateReason(active, active.index === lastClosed, progR)) { showTrade(tt, lastClosed, price, true); maybeNotify(active); return; }
+    showTrade(active, lastClosed, price, false);
+  }
+
+  // Shows a trade (a strategy signal, or the always-on trend trade) with levels, MT5 order and steps.
+  function showTrade(active, lastClosed, price, isTrend) {
+    const card = $('signalCard');
+    const dir = active.side === 'BUY' ? 1 : -1;
     const isNew = active.index === lastClosed;
     const progR = (price - active.entry) * dir / active.slDist;
     card.classList.add(active.side.toLowerCase());
     $('signalText').textContent = active.side;
-    $('signalChip').textContent = isNew ? 'NAYA SIGNAL' : active.tp1Hit ? 'TP1 HIT' : 'TRADE CHAL RAHI';
-    $('signalNote').textContent = 'Signal: ' + fmtTime(active.time + MODE().iv) + ` (${MODE().tf} candle close)` + (active.kind === 'pullback' ? ' · Pullback entry' : active.kind === 'breakout' ? ' · Breakout entry' : '');
+    $('signalChip').textContent = isTrend ? 'TREND TRADE' : isNew ? 'NAYA SIGNAL' : active.tp1Hit ? 'TP1 HIT' : 'TRADE CHAL RAHI';
+    $('signalNote').textContent = isTrend ? `Abhi ki price par trend ke saath trade (${MODE().tf} aur 4H dono ${dir > 0 ? 'upar' : 'neeche'}). Ye khaas signal nahi.` : 'Signal: ' + fmtTime(active.time + MODE().iv) + ` (${MODE().tf} candle close)` + (active.kind === 'pullback' ? ' · Pullback entry' : active.kind === 'breakout' ? ' · Breakout entry' : '');
 
     const order = PLATFORMS.orderFor(settings.platform, inst, active, {
       balance: settings.balance, riskPct: settings.risk, usdPerPoint: usdPerPoint(price), price,
@@ -243,6 +256,7 @@
     // P/L uses the platform's size; if the market isn't on this platform, fall back to MT5 lots for the estimate.
     const sized = order.available ? order : PLATFORMS.orderFor('mt5', inst, active, { balance: settings.balance, riskPct: settings.risk, usdPerPoint: usdPerPoint(price), price });
     const riskUsd = sized.risk.usd;
+    $('pnl').hidden = isTrend;
     $('pnl').innerHTML = `Abhi: <b class="${progR >= 0 ? 'up' : 'down'}">${progR >= 0 ? '+' : ''}${fmt(progR, 2)}R</b> · ${money(progR * riskUsd)} (${esc(sized.sizeText)})`;
 
     const dist = (lvl, above) => `${fmtP(lvl)}<small>Entry se ${fmtP(Math.abs(lvl - active.entry))} ${above ? 'upar' : 'neeche'}</small>`;
@@ -251,19 +265,43 @@
     $('lvTP1').innerHTML = dist(active.tp1, dir > 0);
     $('lvTP2').innerHTML = dist(active.tp2, dir > 0);
     $('tradeBox').hidden = false;
-    renderChecks(settings.filter ? active.checks : null);
+    renderChecks(isTrend || settings.filter ? active.checks : null);
 
     renderOrder(order);
 
-    // Plain-language instructions: can a newcomer still enter this trade right now?
-    let late = '';
-    if (mkt.closed) late = 'Market abhi band hai. Market khulne par app dobara dekhein.';
-    else if (mkt.stale) late = 'Price ka data purana hai, is liye abhi trade na lagayein. Internet check kar ke Refresh dabayein.';
-    else if (active.tp1Hit) late = `Ye trade TP1 tak pohanch chuki hai aur abhi ${progR >= 0 ? '+' : ''}${fmt(progR, 1)}R ${progR >= 0 ? 'munafe' : 'nuqsan'} mein hai. Nayi entry ka waqt guzar gaya; agla signal is ke band hone ke baad aayega.`;
-    else if (progR > (isNew ? 0.5 : 0.3)) late = `Price entry se ${fmt(progR, 1)}R aage nikal chuki hai. Ab entry lena faidemand nahi; agla signal is trade ke band hone ke baad aayega.`;
-    else if (progR < -0.5) late = 'Price Stop Loss ke qareeb ja rahi hai. Is waqt nayi entry na lein.';
-    renderAction({ kind: late ? 'late' : 'enter', why: late, t: active, dir, order, riskUsd });
-    maybeNotify(active);
+    const late = isTrend ? '' : lateReason(active, isNew, progR);
+    renderAction({ kind: late ? 'late' : 'enter', why: late, t: active, dir, order, riskUsd, trend: isTrend });
+    if (!isTrend) maybeNotify(active);
+  }
+
+  // Plain-language instructions: can a newcomer still enter this signal right now? '' = yes.
+  function lateReason(active, isNew, progR) {
+    if (mkt.closed) return 'Market abhi band hai. Market khulne par app dobara dekhein.';
+    else if (mkt.stale) return 'Price ka data purana hai, is liye abhi trade na lagayein. Internet check kar ke Refresh dabayein.';
+    else if (active.tp1Hit) return `Ye trade TP1 tak pohanch chuki hai aur abhi ${progR >= 0 ? '+' : ''}${fmt(progR, 1)}R ${progR >= 0 ? 'munafe' : 'nuqsan'} mein hai. Nayi entry ka waqt guzar gaya; agla signal is ke band hone ke baad aayega.`;
+    else if (progR > (isNew ? 0.5 : 0.3)) return `Price entry se ${fmt(progR, 1)}R aage nikal chuki hai. Ab entry lena faidemand nahi; agla signal is trade ke band hone ke baad aayega.`;
+    else if (progR < -0.5) return 'Price Stop Loss ke qareeb ja rahi hai. Is waqt nayi entry na lein.';
+    return '';
+  }
+
+  // Always-on "trade now" for gold on the 1H modes: when the 1H and 4H trends agree and price is on the trend
+  // side of EMA21, entering at ANY hour in the trend direction (SL 2.5 ATR, TP 3R) was profitable on
+  // 2.5y PAXG / 2.4y GC: win ~38%, PF 1.48 / 1.38, both halves > 1.25, available ~57% of the time.
+  // Entries with price on the wrong side of EMA21 were not (first half PF < 1), so those are skipped.
+  function trendTrade(ind, i, price, trend) {
+    if (mkt.closed || mkt.stale || inst.id !== 'XAUUSD' || MODE().tf !== '1H') return null;
+    const dir = GS.trendTradeDir(ind, lastView.candles, i, price);
+    if (!dir) return null;
+    const d = ind.atr[i] * GS.CONFIG.SL_ATR, side = dir > 0 ? 'BUY' : 'SELL', w = dir > 0 ? 'upar' : 'neeche';
+    return {
+      side, kind: 'trend', entry: price, slDist: d, index: i, time: Date.now(), tp1Hit: false,
+      sl: price - dir * d, tp1: price + dir * d * GS.CONFIG.TP1_R, tp2: price + dir * d * GS.CONFIG.TARGET_R,
+      checks: [
+        { label: `${MODE().tf} trend ${w} hai`, ok: true },
+        { label: `4H trend bhi ${w} hai`, ok: true },
+        { label: `Price EMA21 se ${w} hai (trend ki sahi taraf)`, ok: true },
+      ],
+    };
   }
 
   // "Aapko kya karna hai": numbered steps in simple words so someone with no experience can place the trade.
@@ -334,12 +372,14 @@
         return;
       }
       const btn = side === 'BUY' ? 'Buy' : 'Sell', other = side === 'BUY' ? 'Sell' : 'Buy';
-      box.innerHTML = `<div class="act-head">Abhi ${side} karein</div>
+      box.innerHTML = `<div class="act-head">${a.trend ? `Abhi ${side} kar sakte hain (trend trade)` : `Abhi ${side} karein`}</div>
+        ${a.trend ? `<p class="act-why">${inst.name} ki abhi ki price ${fmtP(t.entry)} hai aur rukh ${a.dir > 0 ? 'upar ↑' : 'neeche ↓'} hai. Is price par ${side} lagayein:</p>` : ''}
         <ol class="act-steps">
           <li><span>${esc(plat)} mein ${inst.id} ka <b>${side}</b> order kholein</span>${val('acSize', esc(a.order.sizeText))}<small>${btn} ka button dabana hai, ${other} ka nahi.</small></li>
           ${steps.join('')}
         </ol>
-        <p class="act-small">Aapke broker ki price ${fmtP(t.entry)} se alag ho to: Stop Loss apni entry se ${fmtP(t.slDist)} ${down}, aur Take Profit ${fmtP(t.slDist * GS.CONFIG.TARGET_R)} ${up} rakhein.</p>`;
+        <p class="act-small">Aapke broker ki price ${fmtP(t.entry)} se alag ho to: Stop Loss apni entry se ${fmtP(t.slDist)} ${down}, aur Take Profit ${fmtP(t.slDist * GS.CONFIG.TARGET_R)} ${up} rakhein.</p>
+        ${a.trend ? '<p class="act-small"><b>Imaandari se:</b> ye khaas signal nahi, trend ke saath trade hai. 2.5 saal mein aisi trades mein se ~38% jeetin, lekin jeet (3R) haar (1R) se teen guna hone ki wajah se har $1 nuqsan par ~$1.4 munafa hua. "NAYA SIGNAL" wali trade is se behtar hoti hai. Har trade par risk 1% ya kam.</p>' : ''}`;
       return;
     }
     // late: no new entry, but tell people already in the trade what to do
