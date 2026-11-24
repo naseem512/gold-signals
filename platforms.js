@@ -52,15 +52,36 @@
       const use = lots > 0 ? lots : 0.01;
       const usd = use * sig.slDist * perLot;
       const points = Math.round(sig.slDist / Math.pow(10, -d));
-      const typeTxt = (dir > 0 ? 'Buy' : 'Sell') + ' (Market)';
+      const typeTxt = (dir > 0 ? 'Buy' : 'Sell') + (sig.pending ? ' Stop (pending)' : ' (Market)');
       const fields = [
         { label: 'Type', value: typeTxt },
+        ...(sig.pending ? [{ label: 'Price (stop)', value: px(sig.entry), copy: true }] : []),
         { label: p.kind === 'ctrader' ? 'Quantity (lots)' : 'Volume (lot)', value: use.toFixed(2), copy: true },
         { label: 'Stop Loss', value: px(sig.sl), copy: true },
         { label: 'Take Profit', value: px(sig.tp2), copy: true },
       ];
       const btn = dir > 0 ? 'Buy' : 'Sell';
-      const steps = {
+      const hrs = sig.pendingHours || 12;
+      const steps = sig.pending ? {
+        mt: [
+          `${p.short} kholein → Quotes mein <b>${inst.id}</b> par tap karein → <b>Trade</b> / <b>New Order</b>.`,
+          `Type: <b>Pending Order</b> → <b>${btn} Stop</b>. Price mein <b>${px(sig.entry)}</b> daalein.`,
+          '<b>Volume</b>, <b>Stop Loss</b> aur <b>Take Profit</b> upar se copy kar ke daalein.',
+          `Expiration mein ${hrs} ghante baad ka waqt rakhein (ya ${hrs} ghante baad khud delete kar dein). <b>Place</b> dabayein.`,
+          `Price ${px(sig.entry)} tak aayegi to order khud chal jayega. TP1 par aadha band karein aur SL entry par le aayein.`,
+        ],
+        ctrader: [
+          `cTrader → <b>${inst.id}</b> → <b>New Order</b> → <b>Stop</b>.`,
+          `${btn}, price <b>${px(sig.entry)}</b>, quantity <b>${use.toFixed(2)} lots</b>.`,
+          'Stop Loss aur Take Profit price par set kar ke upar wali values daalein.',
+          `Expiry ${hrs} ghante. <b>Place order</b> dabayein.`,
+        ],
+        other: [
+          `Apni app mein <b>${inst.id}</b> ka <b>${btn} Stop</b> pending order banayein, price <b>${px(sig.entry)}</b>.`,
+          `Size <b>${use.toFixed(2)} lot</b>, Stop Loss aur Take Profit upar wali price par.`,
+          `${hrs} ghante mein na chale to order cancel kar dein.`,
+        ],
+      }[p.kind] : {
         mt: [
           `${p.short} kholein → Quotes mein <b>${inst.id}</b> par tap karein → <b>Trade</b> / <b>New Order</b>.`,
           'Type: <b>Market Execution</b>. <b>Volume</b>, <b>Stop Loss</b> aur <b>Take Profit</b> upar se copy kar ke daalein.',
@@ -93,6 +114,8 @@
     // ---------- Binance ----------
     const b = BINANCE[inst.id];
     if (!b) return Object.assign(base, { available: false, reason: `${inst.name} (${inst.id}) Binance par nahi milta. Settings mein MT5 ya koi aur broker chunein.` });
+    if (sig.pending) return Object.assign(base, { available: false,
+      reason: `Ye pending ${dir > 0 ? 'BUY' : 'SELL'} STOP order hai (trigger ${px(sig.entry)}). Binance Futures mein "Stop Market" order se trigger ${px(sig.entry)}, TP ${px(sig.tp2)} aur SL ${px(sig.sl)} laga sakte hain; Spot par ye nahi hota.` });
     const spot = p.kind === 'binance-spot';
     if (spot && dir < 0) {
       return Object.assign(base, { available: false,

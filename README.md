@@ -45,6 +45,11 @@ Binance is also the default **price source** for gold (PAXG). This is only the p
 ## Spot gold calibration
 PAXG trades a few dollars away from spot gold (about $11 below spot in Nov 2026), and MT5 brokers quote spot. On each refresh the app and the alert job read a free spot quote (`api.gold-api.com/price/XAU`, no key) and shift the PAXG candles by the gap. Signals do not change, because EMA crosses, RSI, ATR and the filters are unaffected by a constant shift (a test checks this); only the price levels move onto spot. A quote that is stale (over 20 minutes old, e.g. at the weekend) or more than 3% away is ignored. The app then uses the last good gap for up to 3 days, or else shows the raw PAXG price with a warning. Binance platforms always see raw PAXG.
 
+## Pending STOP order + market analysis (v3.1)
+Sometimes the trends agree but price has pulled back to the wrong side of EMA21, where a market entry tested poorly. In that case the card gives a **pending STOP order** at EMA21 in the trend direction. It is valid for 12 hours and fills when price returns to the trend side. Tested with one order at a time on 2.5y PAXG / 2.4y GC: about 8 a month, win ~36%, PF 1.27 / 1.28 (halves 1.04 / 1.48 and 1.11 / 1.48). It is weaker than signals and trend trades, and the card says so.
+
+A breakout order on both sides when the trends disagree was tested too. It lost money on GC (PF 0.70), so it is not used, and those hours still show "no trade". On gold 1H the card now offers something actionable about 85% of the time: a signal, a trend trade or a pending order. A **Market analysis** card shows the 1H and 4H trend, RSI momentum, ATR speed compared with the 30-day average, the 40-candle support and resistance, the 24h range and the EMA positions, followed by a one-line verdict.
+
 ## Trend trade: always-on "trade now" (v3.0, gold 1H)
 When no signal can be entered, the Signal card can still offer a trade at the current price. It does this when the 1H and 4H trends agree and price is on the trend side of EMA21. The card shows SELL/BUY at the live price, with SL 2.5×ATR, TP1 1R, TP2 3R, the lot size and the MT5 order, labelled **TREND TRADE**.
 

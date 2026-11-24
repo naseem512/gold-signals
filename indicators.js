@@ -208,6 +208,17 @@
     return dir && (price - ind.e21[i]) * dir >= 0 ? dir : 0;
   }
 
+  // Pending STOP order (gold 1H): when the trends agree but price has moved to the wrong side of EMA21
+  // (a pullback), place a STOP order at EMA21 in the trend direction, valid 12 hours. Fills when price
+  // comes back to the trend side. 2.5y PAXG / 2.4y GC, one order at a time: ~8 a month, win ~36%,
+  // PF 1.27 / 1.28 (halves 1.04/1.48, 1.11/1.48). Weaker than signals and trend trades.
+  const PENDING_HOURS = 12;
+  function pendingStopDir(ind, candles, i, price) {
+    const tr = trendAt(ind, candles, i), htf = ind.htf[i];
+    const dir = tr === 'up' && htf === 'up' ? 1 : tr === 'down' && htf === 'down' ? -1 : 0;
+    return dir && (price - ind.e21[i]) * dir < 0 ? dir : 0;
+  }
+
   // Signal on the CLOSE of candle i (i must be a closed candle).
   // opts.breakout = false turns the breakout entry off (it only helped on gold; other markets got worse).
   function signalAt(ind, candles, i, mode = 'safe', opts = {}) {
@@ -291,7 +302,7 @@
 
   const api = {
     CONFIG, MODES, modeOf, HOUR, isMarketClosed, marketCandles, ema, rsi, atr, htfTrend, computeAll, trendAt,
-    filterChecks, pullbackAt, breakoutAt, trendTradeDir, signalAt, resolve, backtest, lotSize, shiftCandles,
+    filterChecks, pullbackAt, breakoutAt, trendTradeDir, pendingStopDir, PENDING_HOURS, signalAt, resolve, backtest, lotSize, shiftCandles,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GS = api;

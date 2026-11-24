@@ -198,6 +198,7 @@
     $('mAtr').textContent = fmtP(ind.atr[lastClosed]);
 
     renderSignal(candles, ind, bt, lastClosed, price, trend);
+    renderAnalysis(candles, ind, lastClosed, price, trend);
     drawChart();
     renderReport(candles, btF, btN, lastClosed);
   }
@@ -209,7 +210,7 @@
     const active = lastTrade && lastTrade.result === 'open' ? lastTrade : null;
 
     if (!active) {
-      const tt = trendTrade(ind, lastClosed, price, trend);
+      const tt = trendTrade(ind, lastClosed, price, trend) || pendingTrade(ind, lastClosed, price);
       if (tt) { showTrade(tt, lastClosed, price, true); return; }
       card.classList.add('wait');
       $('signalText').textContent = 'WAIT';
@@ -233,10 +234,41 @@
 
     const dir = active.side === 'BUY' ? 1 : -1;
     const progR = (price - active.entry) * dir / active.slDist;
-    const tt = trendTrade(ind, lastClosed, price, trend);
+    const tt = trendTrade(ind, lastClosed, price, trend) || pendingTrade(ind, lastClosed, price);
     // A running signal that can no longer be entered gives way to the always-on trend trade.
     if (tt && lateReason(active, active.index === lastClosed, progR)) { showTrade(tt, lastClosed, price, true); maybeNotify(active); return; }
     showTrade(active, lastClosed, price, false);
+  }
+
+  // Plain-language chart + market analysis shown under the trade card.
+  function renderAnalysis(candles, ind, i, price, trend) {
+    const htf = ind.htf[i], r = ind.rsi[i], a = ind.atr[i], tf = MODE().tf;
+    const per = Math.round(24 * H / MODE().iv);                  // candles in 24h
+    const win = candles.slice(Math.max(0, i - 39), i + 1), day = candles.slice(Math.max(0, i - per + 1), i + 1);
+    const hi = Math.max(...win.map(c => c.h)), lo = Math.min(...win.map(c => c.l));
+    const atrs = ind.atr.slice(Math.max(0, i - 30 * per), i + 1).filter(x => x != null);
+    const atrAvg = atrs.reduce((s, x) => s + x, 0) / atrs.length;
+    const w = t => ({ up: 'upar ↑', down: 'neeche ↓', side: 'sideways ↔', unknown: '—' }[t] || '—');
+    const pos = (p, e, n) => `${p > e ? 'upar' : 'neeche'} (${n} ${fmtP(e)})`;
+    const mom = r >= 70 ? 'bahut zyada khareedari (overbought), upar ki taraf thakan ho sakti hai'
+      : r >= 55 ? 'khareedar mazboot hain' : r > 45 ? 'barabar, koi taraf mazboot nahi'
+      : r > 30 ? 'bechne wale mazboot hain' : 'bahut zyada bikwali (oversold), neeche ki taraf thakan ho sakti hai';
+    const vol = a / atrAvg;
+    const dir = trend === 'up' && htf === 'up' ? 1 : trend === 'down' && htf === 'down' ? -1 : 0;
+    const right = dir && (price - ind.e21[i]) * dir >= 0;
+    const verdict = !dir ? 'Rukh saaf nahi: 1H aur 4H alag taraf hain. Is waqt trade se bachna behtar hai.'
+      : right ? `${dir > 0 ? 'BUY' : 'SELL'} ka rujhan mazboot hai: dono trend ${dir > 0 ? 'upar' : 'neeche'} aur price sahi taraf.`
+      : `${dir > 0 ? 'BUY' : 'SELL'} ka rujhan hai, lekin price abhi ulti taraf (pullback) mein hai. Wapas aane par entry behtar hai.`;
+    $('analysis').innerHTML = [
+      `<li><span>Rukh (${tf})</span><b>${w(trend)}</b><small>EMA50 ${ind.e50[i] > ind.e200[i] ? '>' : '<'} EMA200, price EMA200 se ${price > ind.e200[i] ? 'upar' : 'neeche'}</small></li>`,
+      `<li><span>Bara rukh (4H)</span><b>${w(htf)}</b><small>4H candles ka EMA50</small></li>`,
+      `<li><span>Momentum (RSI ${fmt(r, 0)})</span><b>${r >= 50 ? 'Khareedar' : 'Bechne wale'}</b><small>${mom}</small></li>`,
+      `<li><span>Raftaar (ATR ${fmtP(a)})</span><b>${vol > 1.3 ? 'Tez' : vol < 0.75 ? 'Dheemi' : 'Normal'}</b><small>Pichle 30 din ki average se ${fmt(Math.abs(vol - 1) * 100, 0)}% ${vol >= 1 ? 'zyada' : 'kam'}${vol > 1.3 ? ': SL door hoga, lot chhota rakhein' : ''}</small></li>`,
+      `<li><span>Resistance / Support</span><b>${fmtP(hi)} / ${fmtP(lo)}</b><small>Pichli 40 candles ka high / low. 24h range: ${fmtP(Math.min(...day.map(c => c.l)))} – ${fmtP(Math.max(...day.map(c => c.h)))}</small></li>`,
+      `<li><span>Moving averages</span><b>Price ${price > ind.e21[i] ? 'EMA21 se upar' : 'EMA21 se neeche'}</b><small>${pos(price, ind.e50[i], 'EMA50')}, ${pos(price, ind.e200[i], 'EMA200')}</small></li>`,
+    ].join('');
+    $('analysisVerdict').textContent = verdict;
+    $('analysisVerdict').className = 'analysis-verdict ' + (!dir ? 'muted' : dir > 0 ? 'buy' : 'sell');
   }
 
   // Shows a trade (a strategy signal, or the always-on trend trade) with levels, MT5 order and steps.
@@ -247,8 +279,8 @@
     const progR = (price - active.entry) * dir / active.slDist;
     card.classList.add(active.side.toLowerCase());
     $('signalText').textContent = active.side;
-    $('signalChip').textContent = isTrend ? 'TREND TRADE' : isNew ? 'NAYA SIGNAL' : active.tp1Hit ? 'TP1 HIT' : 'TRADE CHAL RAHI';
-    $('signalNote').textContent = isTrend ? `Abhi ki price par trend ke saath trade (${MODE().tf} aur 4H dono ${dir > 0 ? 'upar' : 'neeche'}). Ye khaas signal nahi.` : 'Signal: ' + fmtTime(active.time + MODE().iv) + ` (${MODE().tf} candle close)` + (active.kind === 'pullback' ? ' · Pullback entry' : active.kind === 'breakout' ? ' · Breakout entry' : '');
+    $('signalChip').textContent = active.pending ? 'PENDING ORDER' : isTrend ? 'TREND TRADE' : isNew ? 'NAYA SIGNAL' : active.tp1Hit ? 'TP1 HIT' : 'TRADE CHAL RAHI';
+    $('signalNote').textContent = active.pending ? `${active.side} STOP order: price ${fmtP(active.entry)} tak wapas aaye to trade khud khulegi. ${active.pendingHours} ghante mein na khule to cancel karein.` : isTrend ? `Abhi ki price par trend ke saath trade (${MODE().tf} aur 4H dono ${dir > 0 ? 'upar' : 'neeche'}). Ye khaas signal nahi.` : 'Signal: ' + fmtTime(active.time + MODE().iv) + ` (${MODE().tf} candle close)` + (active.kind === 'pullback' ? ' · Pullback entry' : active.kind === 'breakout' ? ' · Breakout entry' : '');
 
     const order = PLATFORMS.orderFor(settings.platform, inst, active, {
       balance: settings.balance, riskPct: settings.risk, usdPerPoint: usdPerPoint(price), price,
@@ -256,11 +288,11 @@
     // P/L uses the platform's size; if the market isn't on this platform, fall back to MT5 lots for the estimate.
     const sized = order.available ? order : PLATFORMS.orderFor('mt5', inst, active, { balance: settings.balance, riskPct: settings.risk, usdPerPoint: usdPerPoint(price), price });
     const riskUsd = sized.risk.usd;
-    $('pnl').hidden = isTrend;
+    $('pnl').hidden = isTrend || !!active.pending;
     $('pnl').innerHTML = `Abhi: <b class="${progR >= 0 ? 'up' : 'down'}">${progR >= 0 ? '+' : ''}${fmt(progR, 2)}R</b> · ${money(progR * riskUsd)} (${esc(sized.sizeText)})`;
 
     const dist = (lvl, above) => `${fmtP(lvl)}<small>Entry se ${fmtP(Math.abs(lvl - active.entry))} ${above ? 'upar' : 'neeche'}</small>`;
-    $('lvEntry').innerHTML = `${fmtP(active.entry)}<small>Broker par jo price mile</small>`;
+    $('lvEntry').innerHTML = `${fmtP(active.entry)}<small>${active.pending ? 'Stop order ki price' : 'Broker par jo price mile'}</small>`;
     $('lvSL').innerHTML = dist(active.sl, dir < 0);
     $('lvTP1').innerHTML = dist(active.tp1, dir > 0);
     $('lvTP2').innerHTML = dist(active.tp2, dir > 0);
@@ -288,6 +320,24 @@
   // side of EMA21, entering at ANY hour in the trend direction (SL 2.5 ATR, TP 3R) was profitable on
   // 2.5y PAXG / 2.4y GC: win ~38%, PF 1.48 / 1.38, both halves > 1.25, available ~57% of the time.
   // Entries with price on the wrong side of EMA21 were not (first half PF < 1), so those are skipped.
+  // No market trade but the trends agree and price pulled back to the wrong side of EMA21:
+  // give a pending STOP order at EMA21 (see GS.pendingStopDir for the test results).
+  function pendingTrade(ind, i, price) {
+    if (mkt.closed || mkt.stale || inst.id !== 'XAUUSD' || MODE().tf !== '1H') return null;
+    const dir = GS.pendingStopDir(ind, lastView.candles, i, price);
+    if (!dir) return null;
+    const lvl = ind.e21[i], d = ind.atr[i] * GS.CONFIG.SL_ATR, side = dir > 0 ? 'BUY' : 'SELL', w = dir > 0 ? 'upar' : 'neeche';
+    return {
+      side, kind: 'pending', pending: true, pendingHours: GS.PENDING_HOURS, entry: lvl, slDist: d, index: i, time: Date.now(), tp1Hit: false,
+      sl: lvl - dir * d, tp1: lvl + dir * d * GS.CONFIG.TP1_R, tp2: lvl + dir * d * GS.CONFIG.TARGET_R, now: price,
+      checks: [
+        { label: `${MODE().tf} trend ${w} hai`, ok: true },
+        { label: `4H trend bhi ${w} hai`, ok: true },
+        { label: `Price abhi thori ${dir > 0 ? 'neeche' : 'upar'} chali gayi hai (pullback): seedha trade nahi, stop order`, ok: true },
+      ],
+    };
+  }
+
   function trendTrade(ind, i, price, trend) {
     if (mkt.closed || mkt.stale || inst.id !== 'XAUUSD' || MODE().tf !== '1H') return null;
     const dir = GS.trendTradeDir(ind, lastView.candles, i, price);
@@ -372,14 +422,15 @@
         return;
       }
       const btn = side === 'BUY' ? 'Buy' : 'Sell', other = side === 'BUY' ? 'Sell' : 'Buy';
-      box.innerHTML = `<div class="act-head">${a.trend ? `Abhi ${side} kar sakte hain (trend trade)` : `Abhi ${side} karein`}</div>
-        ${a.trend ? `<p class="act-why">${inst.name} ki abhi ki price ${fmtP(t.entry)} hai aur rukh ${a.dir > 0 ? 'upar ↑' : 'neeche ↓'} hai. Is price par ${side} lagayein:</p>` : ''}
+      box.innerHTML = `<div class="act-head">${t.pending ? `${side} STOP order lagayein (pending)` : a.trend ? `Abhi ${side} kar sakte hain (trend trade)` : `Abhi ${side} karein`}</div>
+        ${t.pending ? `<p class="act-why">${inst.name} abhi ${fmtP(t.now)} par hai. Rukh ${a.dir > 0 ? 'upar ↑' : 'neeche ↓'} hai lekin price thori ${a.dir > 0 ? 'neeche' : 'upar'} chali gayi hai. Seedha ${side} ki bajaye MT5 mein ye pending order abhi laga dein: price ${fmtP(t.entry)} tak wapas aayi to ${side} khud khul jayega.</p>` : a.trend ? `<p class="act-why">${inst.name} ki abhi ki price ${fmtP(t.entry)} hai aur rukh ${a.dir > 0 ? 'upar ↑' : 'neeche ↓'} hai. Is price par ${side} lagayein:</p>` : ''}
         <ol class="act-steps">
-          <li><span>${esc(plat)} mein ${inst.id} ka <b>${side}</b> order kholein</span>${val('acSize', esc(a.order.sizeText))}<small>${btn} ka button dabana hai, ${other} ka nahi.</small></li>
+          ${t.pending ? `<li><span>${esc(plat)} mein <b>Pending Order → ${btn} Stop</b></span>${val('acPx', fmtP(t.entry))}<small>Ye order ki price hai. Size: ${esc(a.order.sizeText)}. ${t.pendingHours} ghante mein na chale to delete kar dein.</small></li>` : `<li><span>${esc(plat)} mein ${inst.id} ka <b>${side}</b> order kholein</span>${val('acSize', esc(a.order.sizeText))}<small>${btn} ka button dabana hai, ${other} ka nahi.</small></li>`}
           ${steps.join('')}
         </ol>
         <p class="act-small">Aapke broker ki price ${fmtP(t.entry)} se alag ho to: Stop Loss apni entry se ${fmtP(t.slDist)} ${down}, aur Take Profit ${fmtP(t.slDist * GS.CONFIG.TARGET_R)} ${up} rakhein.</p>
-        ${a.trend ? '<p class="act-small"><b>Imaandari se:</b> ye khaas signal nahi, trend ke saath trade hai. 2.5 saal mein aisi trades mein se ~38% jeetin, lekin jeet (3R) haar (1R) se teen guna hone ki wajah se har $1 nuqsan par ~$1.4 munafa hua. "NAYA SIGNAL" wali trade is se behtar hoti hai. Har trade par risk 1% ya kam.</p>' : ''}`;
+        ${t.pending ? '<p class="act-small"><b>Imaandari se:</b> 2.5 saal mein aise pending orders mein se ~36% jeete; jeet 3 guna hone ki wajah se har $1 nuqsan par ~$1.27 munafa. Signal aur trend trade se kamzor, is liye risk 0.5-1% rakhein.</p>' : ''}
+        ${a.trend && !t.pending ? '<p class="act-small"><b>Imaandari se:</b> ye khaas signal nahi, trend ke saath trade hai. 2.5 saal mein aisi trades mein se ~38% jeetin, lekin jeet (3R) haar (1R) se teen guna hone ki wajah se har $1 nuqsan par ~$1.4 munafa hua. "NAYA SIGNAL" wali trade is se behtar hoti hai. Har trade par risk 1% ya kam.</p>' : ''}`;
       return;
     }
     // late: no new entry, but tell people already in the trade what to do

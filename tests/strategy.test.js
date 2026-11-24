@@ -460,3 +460,25 @@ test('Trend trade direction: needs 1H and 4H trend agreement and price on the tr
   }
   assert.ok(n > 200);
 });
+
+// ---------- pending STOP order (gold 1H) ----------
+test('Pending stop direction: trends agree and price on the WRONG side of EMA21; never overlaps a trend trade', () => {
+  const m = GS.marketCandles(fixture), ind = GS.computeAll(m);
+  let n = 0;
+  for (let i = 300; i < m.length; i++) {
+    const p = m[i].c, pd = GS.pendingStopDir(ind, m, i, p), td = GS.trendTradeDir(ind, m, i, p);
+    assert.ok(!(pd && td), 'pending and trend trade at the same time at ' + i);
+    if (pd) { n++; assert.ok((p - ind.e21[i]) * pd < 0); assert.equal(ind.htf[i], pd > 0 ? 'up' : 'down'); }
+  }
+  assert.ok(n > 50);
+  assert.equal(GS.PENDING_HOURS, 12);
+});
+
+test('MT5 order for a pending stop shows the stop price and pending steps', () => {
+  const sig = { side: 'SELL', entry: 2000, sl: 2010, tp1: 1990, tp2: 1970, slDist: 10, pending: true, pendingHours: 12 };
+  const o = P.orderFor('mt5', gold, sig, { balance: 10000, riskPct: 1, usdPerPoint: 100, price: 2005 });
+  assert.equal(field(o, 'Type'), 'Sell Stop (pending)');
+  assert.equal(field(o, 'Price (stop)'), '2000.00');
+  assert.ok(o.steps.some(s => s.includes('Pending Order')));
+  assert.equal(P.orderFor('binance-futures', gold, sig, acct).available, false);
+});
