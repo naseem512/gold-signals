@@ -39,12 +39,14 @@
       "announced": 1795525200000,
       "closed": 1794909600000,
       "init": true,
-      "lastSignal": 1795525200000
+      "lastSignal": 1795525200000,
+      "tp1": 1795525200000
     },
     "XAUUSD-active": {
       "announced": 1795525200000,
       "init": true,
-      "lastSignal": 1795525200000
+      "lastSignal": 1795525200000,
+      "tp1": 1795525200000
     },
     "XAUUSD-scalp": {
       "announced": 1795184100000,
