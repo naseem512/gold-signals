@@ -1,5 +1,5 @@
 // Bump VERSION, the ?v= in index.html, APP_VERSION in app.js and version.json on every release.
-const VERSION = 17;
+const VERSION = 18;
 const CACHE = 'naseem-trader-v' + VERSION;
 const SHELL = ['./', 'index.html', `style.css?v=${VERSION}`, `instruments.js?v=${VERSION}`, `indicators.js?v=${VERSION}`, `platforms.js?v=${VERSION}`,
   `app.js?v=${VERSION}`, 'manifest.json', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'];

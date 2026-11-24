@@ -93,3 +93,8 @@ Instead of a bare WAIT, the card states the trend. When the 1H and 4H trends agr
 npm test                 # strategy, no-repaint and alert-replay tests
 DRY_RUN=1 node alerts/check.js
 ```
+
+## v4.0: at-a-glance trade card + broker calibration
+- The Signal card leads with the action in large text (SELL / BUY / SELL STOP / TRADE NAHI) and a quality badge: ⭐⭐⭐ signal, ⭐⭐ trend trade, ⭐ pending order. Below it is a 2×2 grid of Entry/Stop price, Lot (with $ risk), Stop Loss and Take Profit (with $ reward), each with a Copy button, then the TP1 and risk line. Step-by-step MT5 instructions and the "why" checklist are folded underneath.
+- Settings → **Price ko MT5 se milayein**: enter the current MT5 Bid. The app stores the gap for each market and shifts every price, SL and TP by it, so levels match the user's broker. Cloud alerts still use spot.
+- A saved spot gap is now trusted for 6 hours instead of 3 days.

@@ -240,3 +240,26 @@ label.check input { width: 20px; height: 20px; margin: 0; flex: none; }
 .analysis span { display: block; font-size: 11px; color: var(--muted); }
 .analysis b { display: block; font-size: 15px; margin-top: 2px; }
 .analysis small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* ---------- v4: at-a-glance trade card ---------- */
+.signal-card .signal { font-size: 40px; line-height: 1.05; }
+.quality { font-size: 12px; font-weight: 650; color: var(--gold); letter-spacing: .02em; }
+.quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.quick > div { position: relative; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 11px; min-width: 0; }
+.quick span { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.quick b { display: block; font-size: 24px; font-weight: 750; font-variant-numeric: tabular-nums; margin-top: 2px; overflow-wrap: anywhere; }
+.quick small { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+.quick .sl b { color: var(--sell); } .quick .tp b { color: var(--buy); }
+.quick .copy { position: absolute; top: 8px; right: 8px; }
+.quick-line { margin-top: 10px; font-size: 13px; color: var(--muted); }
+.quick-line b { color: var(--text); } .quick-line .bad { color: var(--sell); }
+.action.enter { padding: 0; border: 0; background: transparent; margin-top: 10px; }
+.act-more > summary, details.more > summary { cursor: pointer; font-size: 14px; font-weight: 650; color: var(--gold); padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); list-style: none; }
+.act-more > summary::-webkit-details-marker, details.more > summary::-webkit-details-marker { display: none; }
+.act-more > summary::before, details.more > summary::before { content: '▸ '; }
+.act-more[open] > summary::before, details.more[open] > summary::before { content: '▾ '; }
+.act-more[open] > summary { margin-bottom: 8px; }
+details.more { margin-top: 8px; }
+details.more .checks { margin-top: 8px; }
+.btn-row { display: flex; gap: 8px; margin-top: 8px; }
+.btn-row .ghost { flex: 1; margin: 0; }

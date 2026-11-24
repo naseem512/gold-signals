@@ -9,12 +9,12 @@
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Naseem Trader</title>
-  <link rel="stylesheet" href="style.css?v=17">
+  <link rel="stylesheet" href="style.css?v=18">
 </head>
 <body>
   <header class="top">
     <div class="brand">
-      <img src="icons/icon-192.png?v=17" alt="" width="34" height="34">
+      <img src="icons/icon-192.png?v=18" alt="" width="34" height="34">
       <div>
         <h1>Naseem Trader</h1>
         <button class="market-pill" id="marketPill" type="button">XAUUSD · 1H</button>
@@ -39,29 +39,36 @@
 
       <div class="card signal-card" id="signalCard">
         <div class="row-between">
-          <span class="label">Signal</span>
           <span class="chip" id="signalChip">—</span>
+          <span class="quality" id="quality"></span>
         </div>
         <div class="signal" id="signalText">—</div>
         <div class="note" id="signalNote"></div>
-        <div class="action" id="actionBox" hidden></div>
 
         <div id="tradeBox" hidden>
+          <div class="quick" id="quick"></div>
+          <div class="quick-line" id="quickLine"></div>
           <div class="pnl" id="pnl"></div>
-          <div class="levels">
-            <div><span>Entry</span><b id="lvEntry">—</b></div>
-            <div class="sl"><span>Stop Loss</span><b id="lvSL">—</b></div>
-            <div class="tp"><span>TP1 (1R)</span><b id="lvTP1">—</b></div>
-            <div class="tp"><span>TP2 (3R)</span><b id="lvTP2">—</b></div>
-          </div>
         </div>
-        <ul class="checks" id="checks" hidden></ul>
+        <div class="action" id="actionBox" hidden></div>
+        <details class="more" id="whyWrap" hidden>
+          <summary>Ye trade kyun? (analysis ke points)</summary>
+          <ul class="checks" id="checks" hidden></ul>
+        </details>
       </div>
 
       <div class="card">
         <div class="label">Market analysis</div>
         <p class="analysis-verdict" id="analysisVerdict">—</p>
         <ul class="analysis" id="analysis"><li class="muted">—</li></ul>
+      </div>
+
+      <div class="card chart-card">
+        <div class="row-between">
+          <span class="label">Chart · <span id="chartTf">1H</span></span>
+          <span class="legend"><i class="l21"></i>EMA21 <i class="l50"></i>EMA50</span>
+        </div>
+        <canvas id="chart" height="220"></canvas>
       </div>
 
       <div class="card" id="mt5Card" hidden>
@@ -90,16 +97,7 @@
         <p class="fine" id="recentSum"></p>
       </div>
 
-      <div class="card chart-card">
-        <div class="row-between">
-          <span class="label">Chart · <span id="chartTf">1H</span></span>
-          <span class="legend"><i class="l21"></i>EMA21 <i class="l50"></i>EMA50</span>
-        </div>
-        <canvas id="chart" height="220"></canvas>
-      </div>
-
-      <div class="card">
-        <div class="label">Market ka haal</div>
+      <div class="card" hidden>
         <div class="stats4">
           <div><span><span id="trendTf">1H</span> trend</span><b id="mTrend">—</b></div>
           <div><span>4H trend</span><b id="mHtf">—</b></div>
@@ -191,6 +189,18 @@
         <p class="fine">Ye sirf <b>price dekhne</b> ke liye hai, trade yahan nahi lagti. Bina key ke Gold ka chart Binance PAXG se banta hai aur asal gold (spot) price ke mutabiq khud adjust ho jata hai, taa ke levels MT5 se milein. Free key (twelvedata.com → Sign up → API Keys) se seedha XAU/USD data aata hai. Key sirf is phone mein save hoti hai.</p>
       </div>
 
+      <div class="card">
+        <div class="label">Price ko MT5 se milayein</div>
+        <label>Abhi MT5 mein <span id="calibSym">XAUUSD</span> ki price (Bid)
+          <input type="number" id="setMt5Px" step="any" inputmode="decimal" placeholder="Misaal: 3631.25">
+        </label>
+        <div class="btn-row">
+          <button class="ghost" id="btnCalib" type="button">Milayein</button>
+          <button class="ghost" id="btnCalibReset" type="button">Reset</button>
+        </div>
+        <p class="fine" id="calibInfo">Har broker ki price thori alag hoti hai. MT5 mein chart par jo price chal rahi ho (Bid) wo yahan likh kar "Milayein" dabayein. Phir app ki price, Entry, SL aur TP bilkul aapke broker ke hisaab se aayenge.</p>
+      </div>
+
       <button class="primary" id="btnSave" type="button">Save</button>
 
       <div class="card">
@@ -213,7 +223,7 @@
         <p class="fine" id="notifyState"></p>
       </div>
 
-      <p class="version">Naseem Trader v3.3</p>
+      <p class="version">Naseem Trader v4.0</p>
     </section>
   </main>
 
@@ -225,9 +235,9 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="instruments.js?v=17"></script>
-  <script src="indicators.js?v=17"></script>
-  <script src="platforms.js?v=17"></script>
-  <script src="app.js?v=17"></script>
+  <script src="instruments.js?v=18"></script>
+  <script src="indicators.js?v=18"></script>
+  <script src="platforms.js?v=18"></script>
+  <script src="app.js?v=18"></script>
 </body>
 </html>

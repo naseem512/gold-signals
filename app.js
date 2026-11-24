@@ -34,7 +34,7 @@
     if (settings.mode !== 'active') { settings.mode = 'active'; store.set('nt_mode', 'active'); migratedToActive = true; }
   }
   let inst = MARKETS.byId(settings.market);
-  let timer = null, loading = false, lastView = null, loadSeq = 0, lastSource = '', lastData = null, mkt = { closed: false, stale: false };
+  let timer = null, loading = false, lastView = null, loadSeq = 0, lastSource = '', lastData = null, lastBasePrice = null, mkt = { closed: false, stale: false };
 
   // ---------- formatting ----------
   const fmtP = (n, d = inst.digits) => n == null || !isFinite(n) ? '—' : Number(n).toFixed(d);
@@ -88,7 +88,7 @@
     } catch { /* fall through to the saved value */ }
     try {
       const saved = JSON.parse(store.get(key, 'null'));
-      if (saved && Date.now() - saved.t < 72 * H && isFinite(saved.off)) return saved.off;
+      if (saved && Date.now() - saved.t < 6 * H && isFinite(saved.off)) return saved.off; // older gaps drift too much
     } catch { /* ignore */ }
     return null;
   }
@@ -162,7 +162,11 @@
     const onBinance = plat.kind.startsWith('binance');
     const fromBinance = source.startsWith('Binance');
     const calibrated = offset != null && fromBinance && !onBinance;
-    const candles = calibrated ? GS.shiftCandles(rawCandles, offset) : rawCandles;
+    const base = calibrated ? GS.shiftCandles(rawCandles, offset) : rawCandles;
+    // The user's own broker adjustment (Settings → Price ko MT5 se milayein), so levels match their MT5 exactly.
+    lastBasePrice = base[base.length - 1].c;
+    const badj = onBinance ? 0 : brokerAdj();
+    const candles = badj ? GS.shiftCandles(base, badj) : base;
     const last = candles.length - 1;
     const IV = MODE().iv;
     const lastClosed = candles[last].t + IV > now ? last - 1 : last;
@@ -190,14 +194,16 @@
     // Price label follows the chosen platform. Binance is only the price feed; MT5 users see the market name, not "Binance".
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const proxy = fromBinance && !onBinance && !calibrated; // raw feed shown to a broker user
-    $('source').textContent = (onBinance && fromBinance ? source : inst.id + (calibrated ? ' spot' : ' live')) + ' · ' + time;
-    $('priceNote').textContent = calibrated
-      ? `Asal gold (spot) price. ${plat.short} par broker ke spread ki wajah se thora sa farq ho sakta hai.`
+    $('source').textContent = (onBinance && fromBinance ? source : inst.id + (badj ? ' · aapke MT5 ke mutabiq' : calibrated ? ' spot' : ' live')) + ' · ' + time;
+    $('priceNote').textContent = badj
+      ? `Aapke MT5 ke hisaab se milayi gayi (${badj >= 0 ? '+' : ''}${fmtP(badj)}). Farq lage to Settings mein dobara milayein.`
+      : calibrated
+      ? `Asal gold (spot) price. Aapke MT5 se thora farq ho to Settings → "Price ko MT5 se milayein".`
       : proxy
         ? (inst.spot ? `Asal gold price abhi nahi mil saki. Ye PAXG price hai jo ${plat.short} se kuch dollar alag hoti hai. SL/TP ka faasla apni entry par lagayein.`
           : `${plat.short} ki price is se thori alag ho sakti hai. SL/TP ka faasla apni entry par lagayein.`)
         : '';
-    $('priceNote').hidden = !(calibrated || proxy);
+    $('priceNote').hidden = !(badj || calibrated || proxy);
 
     // market stats
     const trend = GS.trendAt(ind, candles, lastClosed);
@@ -222,8 +228,9 @@
       const tt = trendTrade(ind, lastClosed, price, trend) || pendingTrade(ind, lastClosed, price);
       if (tt) { showTrade(tt, lastClosed, price, true); return; }
       card.classList.add('wait');
-      $('signalText').textContent = 'WAIT';
-      $('signalChip').textContent = 'Koi trade nahi';
+      $('signalText').textContent = 'TRADE NAHI';
+      $('signalChip').textContent = 'Intezar';
+      $('quality').textContent = '';
       $('tradeBox').hidden = true;
       $('mt5Card').hidden = true;
       const raw = GS.signalAt(ind, candles, lastClosed, settings.mode, MARKETS.optsFor(inst));
@@ -287,9 +294,11 @@
     const isNew = active.index === lastClosed;
     const progR = (price - active.entry) * dir / active.slDist;
     card.classList.add(active.side.toLowerCase());
-    $('signalText').textContent = active.side;
+    $('signalText').textContent = active.pending ? active.side + ' STOP' : active.side;
+    $('quality').textContent = active.pending ? '⭐ Pending order' : isTrend ? '⭐⭐ Trend trade'
+      : settings.mode === 'safe' ? '⭐⭐⭐ Mazboot signal' : '⭐⭐⭐ Signal';
     $('signalChip').textContent = active.pending ? 'PENDING ORDER' : isTrend ? 'TREND TRADE' : isNew ? 'NAYA SIGNAL' : active.tp1Hit ? 'TP1 HIT' : 'TRADE CHAL RAHI';
-    $('signalNote').textContent = active.pending ? `${active.side} STOP order: price ${fmtP(active.entry)} tak wapas aaye to trade khud khulegi. ${active.pendingHours} ghante mein na khule to cancel karein.` : isTrend ? `Abhi ki price par trend ke saath trade (${MODE().tf} aur 4H dono ${dir > 0 ? 'upar' : 'neeche'}). Ye khaas signal nahi.` : 'Signal: ' + fmtTime(active.time + MODE().iv) + ` (${MODE().tf} candle close)` + (active.kind === 'pullback' ? ' · Pullback entry' : active.kind === 'breakout' ? ' · Breakout entry' : '');
+    $('signalNote').textContent = active.pending ? `Pending order abhi MT5 mein lagayein. Price ${fmtP(active.entry)} tak aayi to ${active.side} khud khulega (${active.pendingHours} ghante valid).` : isTrend ? `Abhi market price par ${active.side} lagayein · ${MODE().tf} aur 4H trend dono ${dir > 0 ? 'upar ↑' : 'neeche ↓'}` : 'Signal: ' + fmtTime(active.time + MODE().iv) + ` (${MODE().tf} candle close)` + (active.kind === 'pullback' ? ' · Pullback entry' : active.kind === 'breakout' ? ' · Breakout entry' : '');
 
     const order = PLATFORMS.orderFor(settings.platform, inst, active, {
       balance: settings.balance, riskPct: settings.risk, usdPerPoint: usdPerPoint(price), price,
@@ -300,11 +309,15 @@
     $('pnl').hidden = isTrend || !!active.pending;
     $('pnl').innerHTML = `Abhi: <b class="${progR >= 0 ? 'up' : 'down'}">${progR >= 0 ? '+' : ''}${fmt(progR, 2)}R</b> · ${money(progR * riskUsd)} (${esc(sized.sizeText)})`;
 
-    const dist = (lvl, above) => `${fmtP(lvl)}<small>Entry se ${fmtP(Math.abs(lvl - active.entry))} ${above ? 'upar' : 'neeche'}</small>`;
-    $('lvEntry').innerHTML = `${fmtP(active.entry)}<small>${active.pending ? 'Stop order ki price' : 'Broker par jo price mile'}</small>`;
-    $('lvSL').innerHTML = dist(active.sl, dir < 0);
-    $('lvTP1').innerHTML = dist(active.tp1, dir > 0);
-    $('lvTP2').innerHTML = dist(active.tp2, dir > 0);
+    // At a glance: the four numbers needed to place the trade, each with Copy.
+    const cell = (cls, label, id, v, sub) => `<div class="${cls}"><span>${label}</span><b id="${id}">${v}</b>${sub ? `<small>${sub}</small>` : ''}<button class="copy" data-copy="${id}" type="button">Copy</button></div>`;
+    $('quick').innerHTML =
+      cell('', active.pending ? 'Stop price' : 'Entry', 'qE', fmtP(active.entry), active.pending ? `Abhi ${fmtP(price)}` : 'Market price') +
+      cell('', 'Lot', 'qL', esc(sized.sizeText).replace(' lot', ''), `Risk ${money(riskUsd)}`) +
+      cell('sl', 'Stop Loss', 'qS', fmtP(active.sl), `${fmtP(active.slDist)} ${dir > 0 ? 'neeche' : 'upar'}`) +
+      cell('tp', 'Take Profit', 'qT', fmtP(active.tp2), `Munafa ~${money(riskUsd * GS.CONFIG.TARGET_R)}`);
+    $('quickLine').innerHTML = `TP1 <b>${fmtP(active.tp1)}</b> par aadha band karein, phir SL entry par · Risk ${fmt(riskUsd / settings.balance * 100, 1)}% of balance`
+      + (sized.risk.tooBig ? ` <span class="bad">· 0.01 lot bhi aapke ${fmt(settings.risk, 1)}% risk se zyada hai</span>` : '');
     $('tradeBox').hidden = false;
     renderChecks(isTrend || settings.filter ? active.checks : null);
 
@@ -431,7 +444,7 @@
         return;
       }
       const btn = side === 'BUY' ? 'Buy' : 'Sell', other = side === 'BUY' ? 'Sell' : 'Buy';
-      box.innerHTML = `<div class="act-head">${t.pending ? `${side} STOP order lagayein (pending)` : a.trend ? `Abhi ${side} kar sakte hain (trend trade)` : `Abhi ${side} karein`}</div>
+      box.innerHTML = `<details class="act-more"><summary>Step by step kaise lagayein (${esc(plat)})</summary>
         ${t.pending ? `<p class="act-why">${inst.name} abhi ${fmtP(t.now)} par hai. Rukh ${a.dir > 0 ? 'upar ↑' : 'neeche ↓'} hai lekin price thori ${a.dir > 0 ? 'neeche' : 'upar'} chali gayi hai. Seedha ${side} ki bajaye MT5 mein ye pending order abhi laga dein: price ${fmtP(t.entry)} tak wapas aayi to ${side} khud khul jayega.</p>` : a.trend ? `<p class="act-why">${inst.name} ki abhi ki price ${fmtP(t.entry)} hai aur rukh ${a.dir > 0 ? 'upar ↑' : 'neeche ↓'} hai. Is price par ${side} lagayein:</p>` : ''}
         <ol class="act-steps">
           ${t.pending ? `<li><span>${esc(plat)} mein <b>Pending Order → ${btn} Stop</b></span>${val('acPx', fmtP(t.entry))}<small>Ye order ki price hai. Size: ${esc(a.order.sizeText)}. ${t.pendingHours} ghante mein na chale to delete kar dein.</small></li>` : `<li><span>${esc(plat)} mein ${inst.id} ka <b>${side}</b> order kholein</span>${val('acSize', esc(a.order.sizeText))}<small>${btn} ka button dabana hai, ${other} ka nahi.</small></li>`}
@@ -439,7 +452,8 @@
         </ol>
         <p class="act-small">Aapke broker ki price ${fmtP(t.entry)} se alag ho to: Stop Loss apni entry se ${fmtP(t.slDist)} ${down}, aur Take Profit ${fmtP(t.slDist * GS.CONFIG.TARGET_R)} ${up} rakhein.</p>
         ${t.pending ? '<p class="act-small"><b>Imaandari se:</b> 2.5 saal mein aise pending orders mein se ~36% jeete; jeet 3 guna hone ki wajah se har $1 nuqsan par ~$1.27 munafa. Signal aur trend trade se kamzor, is liye risk 0.5-1% rakhein.</p>' : ''}
-        ${a.trend && !t.pending ? '<p class="act-small"><b>Imaandari se:</b> ye khaas signal nahi, trend ke saath trade hai. 2.5 saal mein aisi trades mein se ~38% jeetin, lekin jeet (3R) haar (1R) se teen guna hone ki wajah se har $1 nuqsan par ~$1.4 munafa hua. "NAYA SIGNAL" wali trade is se behtar hoti hai. Har trade par risk 1% ya kam.</p>' : ''}`;
+        ${a.trend && !t.pending ? '<p class="act-small"><b>Imaandari se:</b> ye khaas signal nahi, trend ke saath trade hai. 2.5 saal mein aisi trades mein se ~38% jeetin, lekin jeet (3R) haar (1R) se teen guna hone ki wajah se har $1 nuqsan par ~$1.4 munafa hua. "NAYA SIGNAL" wali trade is se behtar hoti hai. Har trade par risk 1% ya kam.</p>' : ''}
+        ${!a.trend && !t.pending ? '<p class="act-small">Ye strategy ka asal signal hai (sab se mazboot qisam). Phir bhi har trade nahi jeetti: SL zaroor lagayein aur risk 1% ya kam rakhein.</p>' : ''}</details>`;
       return;
     }
     // late: no new entry, but tell people already in the trade what to do
@@ -473,9 +487,9 @@
 
   function renderChecks(checks) {
     const el = $('checks');
-    if (!checks) { el.hidden = true; return; }
+    if (!checks) { el.hidden = true; $('whyWrap').hidden = true; return; }
     el.innerHTML = checks.map(c => `<li class="${c.ok ? '' : 'bad'}">${esc(c.label)}</li>`).join('');
-    el.hidden = false;
+    el.hidden = false; $('whyWrap').hidden = false;
   }
 
   function renderReport(candles, btF, btN, lastClosed) {
@@ -651,7 +665,7 @@
     $('signalNote').textContent = note || '';
     $('verdictNote').textContent = '';
     $('signalCard').classList.remove('buy', 'sell', 'wait');
-    ['tradeBox', 'mt5Card', 'checks', 'actionBox', 'priceNote'].forEach(id => ($(id).hidden = true));
+    ['tradeBox', 'mt5Card', 'checks', 'actionBox', 'priceNote', 'whyWrap'].forEach(id => ($(id).hidden = true));
     $('btBody').innerHTML = '<tr><td colspan="3" class="muted">—</td></tr>';
     $('history').innerHTML = '<li class="muted">—</li>';
     const cv = $('chart'); cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
@@ -686,9 +700,20 @@
     return `${GS.modeOf(mode).name} mode: ${MARKETS.GRADE_LABEL[g]}. ${MARKETS.TEST_NOTE[g]}${best}` + (m.td && !m.binance ? ' Is market ke liye TwelveData key zaroori hai.' : '');
   }
 
+  // ---------- broker price calibration ----------
+  function brokerAdj() {
+    try { const v = JSON.parse(store.get('nt_badj_' + inst.id, 'null')); return v && isFinite(v.adj) ? v.adj : 0; } catch { return 0; }
+  }
+  function showCalibInfo() {
+    $('calibSym').textContent = inst.id;
+    let v = null; try { v = JSON.parse(store.get('nt_badj_' + inst.id, 'null')); } catch { /* ignore */ }
+    if (v && isFinite(v.adj)) $('calibInfo').textContent = `Milaya hua: ${inst.id} ${v.adj >= 0 ? '+' : ''}${fmtP(v.adj)} (${fmtTime(v.t)}). App ki prices, Entry, SL aur TP ab aapke MT5 ke hisaab se hain. Kuch dino baad ya broker badalne par dobara milayein.`;
+  }
+
   function applyMarketUI() {
     $('marketPill').textContent = inst.id + ' · ' + GS.MODES[settings.mode].name + ' · ' + PLATFORMS.byId(settings.platform).short;
     $('chartTf').textContent = MODE().tf;
+    showCalibInfo();
     $('trendTf').textContent = MODE().tf;
     const topic = MARKETS.topicFor(inst.id, settings.mode);
     $('topic').textContent = topic;
@@ -804,6 +829,27 @@
   });
   $('copyTopic').addEventListener('click', () => copyText($('topic').textContent));
   $('copyTopicAll').addEventListener('click', () => copyText($('topicAll').textContent));
+  $('btnCalib').addEventListener('click', () => {
+    const mt = parseFloat($('setMt5Px').value);
+    if (!(mt > 0)) { toast('MT5 ki price likhein'); return; }
+    if (lastBasePrice == null || !lastData) { toast('Pehle data load hone dein'); return; }
+    const adj = mt - lastBasePrice;
+    if (Math.abs(adj) > lastBasePrice * 0.02) { toast('Farq 2% se zyada hai: symbol ya price check karein'); return; }
+    store.set('nt_badj_' + inst.id, JSON.stringify({ adj, t: Date.now() }));
+    $('setMt5Px').value = '';
+    showCalibInfo();
+    render(lastData.candles, lastData.source, lastData.offset);
+    toast(`Mil gaya: ${adj >= 0 ? '+' : ''}${fmtP(adj)}`);
+  });
+  $('btnCalibReset').addEventListener('click', () => {
+    store.set('nt_badj_' + inst.id, 'null');
+    $('calibInfo').textContent = 'Reset ho gaya. App ab asal spot price dikhayegi.';
+    if (lastData) render(lastData.candles, lastData.source, lastData.offset);
+  });
+  $('quick').addEventListener('click', e => {
+    const btn = e.target.closest('.copy[data-copy]');
+    if (btn) copyText($(btn.dataset.copy).textContent);
+  });
   $('scanList').addEventListener('click', e => {
     const li = e.target.closest('li[data-m]');
     if (!li) return;
@@ -833,7 +879,7 @@
 
   // Auto-update: an installed PWA can keep running an old release for days. Check version.json
   // (never cached) on start and whenever the app comes to the front; if newer, reload once.
-  const APP_VERSION = 17;
+  const APP_VERSION = 18;
   async function checkUpdate() {
     try {
       const v = (await (await fetch('version.json?t=' + Date.now(), { cache: 'no-store' })).json()).version;
