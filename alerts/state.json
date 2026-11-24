@@ -53,9 +53,9 @@
       "tp1": 1795184100000
     },
     "XAUUSD-setup": {
-      "count": 1,
+      "count": 2,
       "day": "2026-11-24",
-      "key": "trendSELL"
+      "key": "pendingSELL"
     }
   }
 }
