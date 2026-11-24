@@ -70,16 +70,24 @@ async function candlesFor(inst, tf = '1H') {
 }
 
 async function notify(inst, ev, mode = 'active') {
-  await post(M.topicFor(inst.id, mode), ev);
-  if (inst.pick === mode) await post(M.ALL_TOPIC, ev); // combined "best markets" topic
+  // "App kholein" opens the app on the same market and mode, so the card shows this trade with its lot size.
+  const url = `${M.APP_URL}?m=${inst.id}&mode=${mode}`;
+  await post(M.topicFor(inst.id, mode), ev, url);
+  if (inst.pick === mode) await post(M.ALL_TOPIC, ev, url); // combined "best markets" topic
 }
 
-async function post(topic, { title, body, tags, priority }) {
+// Risk of the smallest lot (0.01) for a stop distance, so the alert itself says what a trade costs.
+function riskLine(inst, slDist, price) {
+  const usd = 0.01 * inst.usdPerPoint(price) * slDist;
+  return `0.01 lot par risk takreeban $${usd.toFixed(2)}. Apne balance ke hisaab se lot app mein dekhein.`;
+}
+
+async function post(topic, { title, body, tags, priority }, url = M.APP_URL) {
   if (DRY) { console.log(`[DRY] -> ${topic}\n  ${title}\n  ${body.replace(/\n/g, '\n  ')}`); return; }
   const res = await fetch(`${NTFY}/${topic}`, {
     method: 'POST',
     body,
-    headers: { Title: title, Tags: tags, Priority: String(priority), Click: M.APP_URL, Actions: `view, App kholein, ${M.APP_URL}` },
+    headers: { Title: title, Tags: tags, Priority: String(priority), Click: url, Actions: `view, App kholein, ${url}` },
   });
   if (!res.ok) throw new Error(`ntfy ${res.status} for ${topic}`);
   console.log(`sent -> ${topic}: ${title}`);
@@ -106,7 +114,7 @@ function signalMessage(inst, t, mode = 'safe') {
       `Take Profit: ${fmt(inst, t.tp2)}`,
       `Price ${fmt(inst, t.tp1)} par aaye to aadha lot band karein aur SL entry par le aayein.`,
       `Broker ki price alag ho to SL apni entry se ${fmt(inst, t.slDist)} ${down}, TP ${fmt(inst, Math.abs(t.tp2 - t.entry))} ${up}.`,
-      'Lot size ke liye app kholein.',
+      riskLine(inst, t.slDist, t.entry),
     ].join('\n'),
   };
 }
@@ -134,7 +142,8 @@ function setupAlert(inst, st, now, candles) {
       `
 Stop Loss: ${fmt(inst, sl)}
 Take Profit: ${fmt(inst, tp)}
-Khaas signal nahi, trend setup hai. Lot size app mein dekhein.`,
+${riskLine(inst, d, e)}
+Khaas signal nahi, trend setup hai.`,
   };
 }
 

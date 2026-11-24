@@ -19,6 +19,15 @@
     key: store.get('nt_key', store.get('gs_key', '')),
     filter: store.get('nt_filter', store.get('gs_filter', '1')) === '1',
   };
+  // Deep link from an alert (?m=XAUUSD&mode=active): open the market/mode the alert was about.
+  let fromAlert = null;
+  try {
+    const q = new URLSearchParams(location.search);
+    const m = q.get('m'), md = q.get('mode');
+    if (m && MARKETS.INSTRUMENTS.some(x => x.id === m)) { settings.market = m; store.set('nt_market', m); fromAlert = m; }
+    if (md && GS.MODES[md]) { settings.mode = md; store.set('nt_mode', md); store.set('nt_mode_v26', '1'); fromAlert = (fromAlert || settings.market) + ' · ' + GS.MODES[md].name; }
+    if (q.has('m') || q.has('mode')) history.replaceState(null, '', location.pathname);
+  } catch { /* ignore */ }
   let migratedToActive = false;
   if (store.get('nt_mode_v26', null) === null) { // v2.6: Active is the default; switch everyone once
     store.set('nt_mode_v26', '1');
@@ -824,7 +833,7 @@
 
   // Auto-update: an installed PWA can keep running an old release for days. Check version.json
   // (never cached) on start and whenever the app comes to the front; if newer, reload once.
-  const APP_VERSION = 16;
+  const APP_VERSION = 17;
   async function checkUpdate() {
     try {
       const v = (await (await fetch('version.json?t=' + Date.now(), { cache: 'no-store' })).json()).version;
@@ -845,4 +854,5 @@
   schedule();
   refresh();
   if (migratedToActive) setTimeout(() => toast('Active mode ON: ab zyada signal milenge'), 800);
+  if (fromAlert) setTimeout(() => toast('Alert wali trade: ' + fromAlert), 900);
 })();
