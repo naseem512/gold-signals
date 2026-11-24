@@ -9,10 +9,10 @@
       "tp1": 1794999600000
     },
     "BTCUSD-active": {
-      "announced": 1794751200000,
+      "announced": 1795525200000,
       "closed": 1794751200000,
       "init": true,
-      "lastSignal": 1794751200000
+      "lastSignal": 1795525200000
     },
     "ETHUSD": {
       "announced": 1794790800000,
@@ -22,10 +22,10 @@
       "tp1": 1794063600000
     },
     "ETHUSD-active": {
-      "announced": 1795053600000,
+      "announced": 1795525200000,
       "closed": 1795053600000,
       "init": true,
-      "lastSignal": 1795053600000
+      "lastSignal": 1795525200000
     },
     "EURUSD": {},
     "EURUSD-active": {},
@@ -36,14 +36,15 @@
     "XAGUSD": {},
     "XAGUSD-active": {},
     "XAUUSD": {
-      "announced": 1794909600000,
+      "announced": 1795525200000,
       "closed": 1794909600000,
       "init": true,
-      "lastSignal": 1794909600000
+      "lastSignal": 1795525200000
     },
     "XAUUSD-active": {
+      "announced": 1795525200000,
       "init": true,
-      "lastSignal": 1795118400000
+      "lastSignal": 1795525200000
     },
     "XAUUSD-scalp": {
       "announced": 1795184100000,
