@@ -822,6 +822,24 @@
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
+  // Auto-update: an installed PWA can keep running an old release for days. Check version.json
+  // (never cached) on start and whenever the app comes to the front; if newer, reload once.
+  const APP_VERSION = 16;
+  async function checkUpdate() {
+    try {
+      const v = (await (await fetch('version.json?t=' + Date.now(), { cache: 'no-store' })).json()).version;
+      if (v > APP_VERSION && sessionStorage.getItem('nt_reloaded') !== String(v)) {
+        sessionStorage.setItem('nt_reloaded', String(v));
+        const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+        if (reg) await reg.update().catch(() => {});
+        location.reload();
+      }
+    } catch { /* offline: try again later */ }
+  }
+  checkUpdate();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
+  setInterval(checkUpdate, 15 * 60 * 1000);
+
   showTab(store.get('nt_tab', 'signal'));
   showNotifyState();
   schedule();

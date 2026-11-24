@@ -1,5 +1,5 @@
-// Bump VERSION (and the ?v= in index.html) on every release.
-const VERSION = 15;
+// Bump VERSION, the ?v= in index.html, APP_VERSION in app.js and version.json on every release.
+const VERSION = 16;
 const CACHE = 'naseem-trader-v' + VERSION;
 const SHELL = ['./', 'index.html', `style.css?v=${VERSION}`, `instruments.js?v=${VERSION}`, `indicators.js?v=${VERSION}`, `platforms.js?v=${VERSION}`,
   `app.js?v=${VERSION}`, 'manifest.json', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'];
@@ -18,7 +18,7 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== location.origin) return; // price APIs always go to the network
+  if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.endsWith('version.json')) return; // price APIs always go to the network
   // Network first, bypassing the HTTP cache so a new release is never mixed with old files.
   e.respondWith(
     fetch(e.request, { cache: 'no-cache' }).then(res => {
