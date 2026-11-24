@@ -482,3 +482,17 @@ test('MT5 order for a pending stop shows the stop price and pending steps', () =
   assert.ok(o.steps.some(s => s.includes('Pending Order')));
   assert.equal(P.orderFor('binance-futures', gold, sig, acct).available, false);
 });
+
+test('Setup alerts: only when the setup changes, at most 2 a day', () => {
+  const { setupAlert } = require('../alerts/check.js');
+  const m = GS.marketCandles(fixture), inst = M.byId('XAUUSD'), st = {};
+  const perDay = {};
+  for (let i = 1000; i < m.length; i++) {
+    const now = m[i].t + H + 10 * 60 * 1000;
+    const ev = setupAlert(inst, st, now, m.slice(0, i + 1));
+    if (ev) { const d = new Date(now).toISOString().slice(0, 10); perDay[d] = (perDay[d] || 0) + 1; assert.match(ev.body, /Stop Loss: .*\nTake Profit/); }
+  }
+  const counts = Object.values(perDay);
+  assert.ok(counts.length > 10);
+  assert.ok(counts.every(c => c <= 2));
+});

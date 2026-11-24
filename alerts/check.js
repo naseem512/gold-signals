@@ -111,6 +111,33 @@ function signalMessage(inst, t, mode = 'safe') {
   };
 }
 
+// Trend trade / pending STOP setup alert (gold 1H): at most 2 a day, only when the setup changes
+// (new direction or new type). Same rules as the app card (GS.trendTradeDir / GS.pendingStopDir).
+function setupAlert(inst, st, now, candles) {
+  if (GS.isMarketClosed(now)) return null;
+  const last = candles.length - 1, i = candles[last].t + H > now ? last - 1 : last;
+  const ind = GS.computeAll(candles), price = candles[last].c;
+  const td = GS.trendTradeDir(ind, candles, i, price), pd = td ? 0 : GS.pendingStopDir(ind, candles, i, price);
+  const dir = td || pd;
+  const key = dir ? (td ? 'trend' : 'pending') + (dir > 0 ? 'BUY' : 'SELL') : '';
+  const day = new Date(now).toISOString().slice(0, 10);
+  if (st.day !== day) { st.day = day; st.count = 0; }
+  if (!dir || key === st.key) { if (!dir) st.key = ''; return null; }
+  if (st.count >= 2) return null;
+  st.key = key; st.count++;
+  const side = dir > 0 ? 'BUY' : 'SELL', d = ind.atr[i] * GS.CONFIG.SL_ATR;
+  const e = td ? price : ind.e21[i], sl = e - dir * d, tp = e + dir * d * GS.CONFIG.TARGET_R;
+  return {
+    title: td ? `${inst.id}: ${side} trend trade` : `${inst.id}: ${side} STOP order setup`,
+    tags: 'bell', priority: 4,
+    body: (td ? `Abhi ${side} kar sakte hain (price ${fmt(inst, e)}).` : `Pending ${side} STOP lagayein: ${fmt(inst, e)} (12 ghante valid).`) +
+      `
+Stop Loss: ${fmt(inst, sl)}
+Take Profit: ${fmt(inst, tp)}
+Khaas signal nahi, trend setup hai. Lot size app mein dekhein.`,
+  };
+}
+
 async function checkMarket(inst, st, now, candlesOverride, mode = 'safe') {
   const candles = candlesOverride || await candlesFor(inst);
   if (!candles) return { skipped: 'no TwelveData key' };
@@ -184,6 +211,11 @@ async function main() {
     try {
       const candles = await candlesFor(inst); // 1H, fetched once for Active and Safe
       const c15 = SCALP_MARKETS.includes(inst.id) ? await candlesFor(inst, '15m') : null;
+      if (inst.id === 'XAUUSD' && candles) {
+        const st = state.markets['XAUUSD-setup'] = state.markets['XAUUSD-setup'] || {};
+        const ev = setupAlert(inst, st, now, candles);
+        if (ev) await notify(inst, ev, 'active');
+      }
       for (const mode of MODES) {
         if (mode === 'scalp' && !c15) continue;
         const key = stateKey(inst, mode);
@@ -212,4 +244,4 @@ function sortKeys(o) {
 }
 
 if (require.main === module) main().catch(e => { console.error(e); process.exit(1); });
-module.exports = { checkMarket, signalMessage };
+module.exports = { setupAlert, checkMarket, signalMessage };
