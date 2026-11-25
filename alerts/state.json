@@ -25,7 +25,8 @@
       "announced": 1795525200000,
       "closed": 1795053600000,
       "init": true,
-      "lastSignal": 1795525200000
+      "lastSignal": 1795525200000,
+      "tp1": 1795525200000
     },
     "EURUSD": {},
     "EURUSD-active": {},
