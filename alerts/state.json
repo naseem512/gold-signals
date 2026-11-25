@@ -12,7 +12,8 @@
       "announced": 1795525200000,
       "closed": 1794751200000,
       "init": true,
-      "lastSignal": 1795525200000
+      "lastSignal": 1795525200000,
+      "tp1": 1795525200000
     },
     "ETHUSD": {
       "announced": 1794790800000,
