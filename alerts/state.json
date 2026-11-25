@@ -46,7 +46,7 @@
     },
     "XAUUSD-active": {
       "announced": 1795618800000,
-      "closed": 1795525200000,
+      "closed": 1795618800000,
       "init": true,
       "lastSignal": 1795618800000,
       "tp1": 1795525200000
